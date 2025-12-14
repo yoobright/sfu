@@ -1,0 +1,6 @@
+**/build/
+**/out/
+**/.nvim/
+**/EDA_tool/
+**/*.json
+**/.cache
