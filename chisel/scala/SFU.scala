@@ -9,6 +9,8 @@ object SFUOp {
   val RCP   = 2.U(3.W)
   val SQRT  = 3.U(3.W)
   val RSQRT = 4.U(3.W)
+  val SIN   = 5.U(3.W)
+  val COS   = 6.U(3.W)
 }
 
 // just for readability, do not change values
@@ -45,6 +47,7 @@ object Function {
   val RCP   = FunctionParams(7, 1, -1,  1, 0,  0,  0)
   val SQRT  = FunctionParams(6, 1,  1, -1, 0, -1, -3)
   val RSQRT = FunctionParams(6, 1, -1,  1, 0, -1, -1)
+  val SIN   = FunctionParams(6, 1,  1,  -1, 0,  1, 1)
 
   def getShift0(op: UInt): UInt = {
     MuxLookup(op, 0.U(5.W)) (Seq(
@@ -52,7 +55,9 @@ object Function {
       SFUOp.LOG2  -> LOG2.shift0.U(5.W),
       SFUOp.RCP   -> RCP.shift0.U(5.W),
       SFUOp.SQRT  -> SQRT.shift0.U(5.W),
-      SFUOp.RSQRT -> RSQRT.shift0.U(5.W)
+      SFUOp.RSQRT -> RSQRT.shift0.U(5.W),
+      SFUOp.SIN   -> SIN.shift0.U(5.W),
+      SFUOp.COS   -> SIN.shift0.U(5.W)
     ))
   }
 
@@ -62,7 +67,9 @@ object Function {
       SFUOp.LOG2  -> LOG2.shift1.U(5.W),
       SFUOp.RCP   -> RCP.shift1.U(5.W),
       SFUOp.SQRT  -> SQRT.shift1.U(5.W),
-      SFUOp.RSQRT -> RSQRT.shift1.U(5.W)
+      SFUOp.RSQRT -> RSQRT.shift1.U(5.W),
+      SFUOp.SIN   -> SIN.shift1.U(5.W),
+      SFUOp.COS   -> SIN.shift1.U(5.W)
     ))
   }
   def getShift2(op: UInt): UInt = {
@@ -71,7 +78,9 @@ object Function {
       SFUOp.LOG2  -> LOG2.shift2.U(5.W),
       SFUOp.RCP   -> RCP.shift2.U(5.W),
       SFUOp.SQRT  -> SQRT.shift2.U(5.W),
-      SFUOp.RSQRT -> RSQRT.shift2.U(5.W)
+      SFUOp.RSQRT -> RSQRT.shift2.U(5.W),
+      SFUOp.SIN   -> SIN.shift2.U(5.W),
+      SFUOp.COS   -> SIN.shift2.U(5.W)
     ))
   }
 
@@ -118,24 +127,60 @@ object SFUUtils {
 
 import SFUUtils._
 
+class SFUInput extends Bundle {
+  val x  = UInt(32.W)
+  val op = UInt(3.W)
+}
 
-class Filter[T <: Bundle](throughoutGen: => T) extends Module {
-  class InBundle extends Bundle {
-    val x          = UInt(32.W)
-    val op         = UInt(3.W)
-    val throughout = throughoutGen.cloneType
-  }
-  class OutBundle extends Bundle {
-    val sign       = UInt(1.W)
-    val exponent   = UInt(8.W)
-    val mantissa   = UInt(23.W)
-    val bypass     = Bool()
-    val bypassVal  = UInt(32.W)
-    val throughout = throughoutGen.cloneType
-  }
+class FilterToRangeReduce extends Bundle {
+  val sign      = UInt(1.W)
+  val exponent  = UInt(8.W)
+  val mantissa  = UInt(23.W)
+  val op        = UInt(3.W)
+  val bypass    = Bool()
+  val bypassVal = UInt(32.W)
+}
+
+class RangeReduceToLookup extends Bundle {
+  val index     = UInt(7.W)
+  val xl        = UInt(17.W)
+  val sign      = UInt(1.W)
+  val exp       = SInt(8.W)
+  val op        = UInt(3.W)
+  val bypass    = Bool()
+  val bypassVal = UInt(32.W)
+}
+
+class LookupToPoly extends Bundle {
+  val c0        = SInt(27.W)
+  val c1        = SInt(17.W)
+  val c2        = SInt(13.W)
+  val xl        = UInt(17.W)
+  val sign      = UInt(1.W)
+  val exp       = SInt(8.W)
+  val op        = UInt(3.W)
+  val bypass    = Bool()
+  val bypassVal = UInt(32.W)
+}
+
+class PolyToCompose extends Bundle {
+  val polyResult = UInt(27.W)
+  val sign       = UInt(1.W)
+  val exp        = SInt(8.W)
+  val op         = UInt(3.W)
+  val bypass     = Bool()
+  val bypassVal  = UInt(32.W)
+}
+
+class SFUOutput extends Bundle {
+  val result = UInt(32.W)
+}
+
+
+class Filter extends Module {
   val io = IO(new Bundle {
-    val in  = Flipped(Decoupled(new InBundle))
-    val out = Decoupled(new OutBundle)
+    val in  = Flipped(Decoupled(new SFUInput))
+    val out = Decoupled(new FilterToRangeReduce)
   })
  
   val s = io.in.bits.x(31)
@@ -147,13 +192,13 @@ class Filter[T <: Bundle](throughoutGen: => T) extends Module {
   val isNaN    = (e === "hFF".U) && (m =/= 0.U)
   val isNeg    =  s === 1.U
  
-  val tooBig = (!s) && (io.in.bits.x > SFUParameters.MAX_INPUT_EXP2)
-  val tooNeg =   s  && (io.in.bits.x > SFUParameters.MIN_INPUT_EXP2)
+  val tooBig = (!s) && (e >= 134.U)
+  val tooNeg =   s  && (e >= 134.U)
 
   val bypass    = Wire(Bool())
   val bypassVal = Wire(UInt(32.W))
 
-  when (io.in.bits.op === SFUOp.EXP2) {
+  when(io.in.bits.op === SFUOp.EXP2) {
     bypass    := isZero || isInf || isNaN || tooBig || tooNeg
     bypassVal := MuxCase(SFUParameters.POS_ZERO, Seq(
       isZero  -> SFUParameters.POS_ONE,
@@ -162,7 +207,7 @@ class Filter[T <: Bundle](throughoutGen: => T) extends Module {
       tooBig  -> SFUParameters.POS_INF,
       tooNeg  -> SFUParameters.POS_ZERO
     ))
-  } .elsewhen (io.in.bits.op === SFUOp.LOG2) {
+  }.elsewhen(io.in.bits.op === SFUOp.LOG2) {
     bypass    := isNeg || isZero || isInf || isNaN
     bypassVal := MuxCase(SFUParameters.POS_ZERO, Seq(
       isNeg  -> SFUParameters.NAN,
@@ -170,14 +215,14 @@ class Filter[T <: Bundle](throughoutGen: => T) extends Module {
       isInf  -> SFUParameters.POS_INF,
       isNaN  -> SFUParameters.NAN
     ))
-  } .elsewhen (io.in.bits.op === SFUOp.RCP) {
+  }.elsewhen(io.in.bits.op === SFUOp.RCP) {
     bypass    := isZero || isNaN || isInf
     bypassVal := MuxCase(SFUParameters.POS_ZERO, Seq(
       isZero -> Mux(isNeg, SFUParameters.NEG_INF, SFUParameters.POS_INF),
       isNaN  -> SFUParameters.NAN,
       isInf  -> Mux(isNeg, SFUParameters.NEG_ZERO, SFUParameters.POS_ZERO)
     ))
-  } .elsewhen (io.in.bits.op === SFUOp.SQRT) {
+  }.elsewhen(io.in.bits.op === SFUOp.SQRT) {
     bypass    := isNeg || isZero || isInf || isNaN
     bypassVal := MuxCase(SFUParameters.POS_ZERO, Seq(
       isNeg  -> SFUParameters.NAN,
@@ -185,7 +230,7 @@ class Filter[T <: Bundle](throughoutGen: => T) extends Module {
       isInf  -> SFUParameters.POS_INF,
       isNaN  -> SFUParameters.NAN
     ))
-  } .elsewhen (io.in.bits.op === SFUOp.RSQRT) {
+  }.elsewhen(io.in.bits.op === SFUOp.RSQRT) {
     bypass    := isNeg || isZero || isInf || isNaN
     bypassVal := MuxCase(SFUParameters.POS_ZERO, Seq(
       isNeg  -> SFUParameters.NAN,
@@ -193,44 +238,44 @@ class Filter[T <: Bundle](throughoutGen: => T) extends Module {
       isInf  -> SFUParameters.POS_ZERO,
       isNaN  -> SFUParameters.NAN
     ))
-  } .otherwise {
+  }.elsewhen(io.in.bits.op === SFUOp.SIN) {
+    bypass    := isZero || isInf || isNaN
+    bypassVal := MuxCase(SFUParameters.POS_ZERO, Seq(
+      isZero -> Mux(isNeg, SFUParameters.NEG_ZERO, SFUParameters.POS_ZERO),
+      isInf  -> SFUParameters.NAN,
+      isNaN  -> SFUParameters.NAN
+    ))
+  }.elsewhen(io.in.bits.op === SFUOp.COS) {
+    bypass    := isZero || isInf || isNaN
+    bypassVal := MuxCase(SFUParameters.POS_ONE, Seq(
+      isZero -> SFUParameters.POS_ONE,
+      isInf  -> SFUParameters.NAN,
+      isNaN  -> SFUParameters.NAN
+    ))
+  }.otherwise {
     bypass    := false.B
     bypassVal := SFUParameters.POS_ZERO
   }
  
-  val s1 = Wire(Decoupled(new OutBundle))
+  val s1 = Wire(Decoupled(new FilterToRangeReduce))
   val s1Pipe = s1.handshakePipeIf(true)
  
   s1.valid           := io.in.valid
   s1.bits.sign       := s
   s1.bits.exponent   := e
   s1.bits.mantissa   := m
+  s1.bits.op         := io.in.bits.op
   s1.bits.bypass     := bypass
   s1.bits.bypassVal  := bypassVal
-  s1.bits.throughout := io.in.bits.throughout
   io.in.ready        := s1.ready
  
   io.out <> s1Pipe
 }
 
-class RangeReduce[T <: Bundle](throughoutGen: => T) extends Module {
-  class InBundle extends Bundle {
-    val sign       = UInt(1.W)
-    val exponent   = UInt(8.W)
-    val mantissa   = UInt(23.W)
-    val op         = UInt(3.W)
-    val throughout = throughoutGen.cloneType
-  }
-  class OutBundle extends Bundle {
-    val index      = UInt(7.W)
-    val xl         = UInt(17.W)
-    val exp        = SInt(8.W)
-    val throughout = throughoutGen.cloneType
-  }
- 
+class RangeReduce extends Module {
   val io = IO(new Bundle {
-    val in  = Flipped(Decoupled(new InBundle))
-    val out = Decoupled(new OutBundle)
+    val in  = Flipped(Decoupled(new FilterToRangeReduce))
+    val out = Decoupled(new RangeReduceToLookup)
   })
 
   val op       = io.in.bits.op
@@ -246,16 +291,32 @@ class RangeReduce[T <: Bundle](throughoutGen: => T) extends Module {
   val sigShifted    = Mux(shift >= 0.S, sigExtended << shift.asUInt, sigExtended >> (-shift).asUInt)
   val intPart       = sigShifted(30, 23)
   val fracPart      = sigShifted(22, 0)
+  val fracPartInv   =  ~fracPart
   val isFracZero    = fracPart === 0.U
-  val intPartFloor  = Mux(sign && (!isFracZero), intPart + 1.U, intPart)
-  val fracPartFloor = Mux(sign && (!isFracZero), (1.U << 23) - fracPart, fracPart)
+  val intPartFloor  = Mux(sign && (!isFracZero), intPart + 1.U    , intPart)
+  val fracPartFloor = Mux(sign && (!isFracZero), fracPartInv + 1.U, fracPart)
+
+  // sin/cos specific quadrant calculation
+  val quadrant = intPart(1, 0)
+  val signSin  = sign.asUInt ^ quadrant(1)
+  val signCos  = quadrant(1) ^ quadrant(0)
+
+  val fracSin  = Mux(quadrant(0), fracPartInv , fracPart)
+  val fracCos  = Mux(quadrant(0), fracPart    , fracPartInv)
+
+  val signFinal = MuxLookup(op, sign.asUInt) (Seq(
+    SFUOp.SIN -> signSin,
+    SFUOp.COS -> signCos
+  ))
 
   val exp = MuxLookup(op, 0.S(8.W)) (Seq(
     SFUOp.EXP2  -> Mux(sign, -(intPartFloor.asSInt), intPartFloor.asSInt),
     SFUOp.LOG2  -> expSigned,
     SFUOp.RCP   -> expSigned,
-    SFUOp.SQRT  -> expSigned,
-    SFUOp.RSQRT -> expSigned
+    SFUOp.SQRT  -> (expSigned >> 1),
+    SFUOp.RSQRT -> (expSigned >> 1),
+    SFUOp.SIN   -> 0.S(8.W),
+    SFUOp.COS   -> 0.S(8.W)
   ))
 
   val index = MuxLookup(op, 0.U(7.W)) (Seq(
@@ -263,7 +324,9 @@ class RangeReduce[T <: Bundle](throughoutGen: => T) extends Module {
     SFUOp.LOG2  -> Cat(0.U(1.W), mantissa(22, 17)),
     SFUOp.RCP   -> mantissa(22, 16),
     SFUOp.SQRT  -> Cat(expSigned(0), mantissa(22, 17)),
-    SFUOp.RSQRT -> Cat(expSigned(0), mantissa(22, 17))
+    SFUOp.RSQRT -> Cat(expSigned(0), mantissa(22, 17)),
+    SFUOp.SIN   -> Cat(0.U(1.W), fracSin(22, 17)),
+    SFUOp.COS   -> Cat(0.U(1.W), fracCos(22, 17))
   ))
 
   val xl = MuxLookup(op, 0.U(32.W)) (Seq(
@@ -271,38 +334,30 @@ class RangeReduce[T <: Bundle](throughoutGen: => T) extends Module {
     SFUOp.LOG2  -> mantissa(16, 0),
     SFUOp.RCP   -> Cat(0.U(1.W), mantissa(15, 0)),
     SFUOp.SQRT  -> mantissa(16, 0),
-    SFUOp.RSQRT -> mantissa(16, 0)
+    SFUOp.RSQRT -> mantissa(16, 0),
+    SFUOp.SIN   -> fracSin(16, 0),
+    SFUOp.COS   -> fracCos(16, 0)
   ))
  
-  val s1     = Wire(Decoupled(new OutBundle))
+  val s1     = Wire(Decoupled(new RangeReduceToLookup))
   val s1Pipe = s1.handshakePipeIf(true)
   io.in.ready        := s1.ready
   s1.valid           := io.in.valid
-  s1.bits.exp        := exp
   s1.bits.index      := index
   s1.bits.xl         := xl
-  s1.bits.throughout := io.in.bits.throughout
+  s1.bits.sign       := signFinal
+  s1.bits.exp        := exp
+  s1.bits.op         := op
+  s1.bits.bypass     := io.in.bits.bypass
+  s1.bits.bypassVal  := io.in.bits.bypassVal
  
   io.out <> s1Pipe
 }
 
-class LookupTable[T <: Bundle](throughoutGen: => T) extends Module {
-  class InBundle extends Bundle {
-    val op         = UInt(3.W)
-    val index      = UInt(7.W)
-    val throughout = throughoutGen.cloneType
-  }
- 
-  class OutBundle extends Bundle {
-    val c0         = SInt(27.W)
-    val c1         = SInt(17.W)
-    val c2         = SInt(13.W)
-    val throughout = throughoutGen.cloneType
-  }
- 
+class LookupTable extends Module {
   val io = IO(new Bundle {
-    val in  = Flipped(Decoupled(new InBundle))
-    val out = Decoupled(new OutBundle)
+    val in  = Flipped(Decoupled(new RangeReduceToLookup))
+    val out = Decoupled(new LookupToPoly)
   })
  
   class LUTEntry extends Bundle {
@@ -344,6 +399,7 @@ class LookupTable[T <: Bundle](throughoutGen: => T) extends Module {
   val sqrtOddLUT   = VecInit(loadLUT(s"$lutPath/sqrt-odd-coeffs.txt",   Function.SQRT.c0Sign,  Function.SQRT.c1Sign,  Function.SQRT.c2Sign))
   val rsqrtEvenLUT = VecInit(loadLUT(s"$lutPath/rsqrt-even-coeffs.txt", Function.RSQRT.c0Sign, Function.RSQRT.c1Sign, Function.RSQRT.c2Sign))
   val rsqrtOddLUT  = VecInit(loadLUT(s"$lutPath/rsqrt-odd-coeffs.txt",  Function.RSQRT.c0Sign, Function.RSQRT.c1Sign, Function.RSQRT.c2Sign))
+  val sinLUT       = VecInit(loadLUT(s"$lutPath/sin-coeffs.txt",        Function.SIN.c0Sign,   Function.SIN.c1Sign,   Function.SIN.c2Sign))
 
   val op    = io.in.bits.op
   val index = io.in.bits.index
@@ -353,10 +409,12 @@ class LookupTable[T <: Bundle](throughoutGen: => T) extends Module {
     SFUOp.LOG2  -> log2LUT(index(5, 0)),
     SFUOp.RCP   -> rcpLUT(index),
     SFUOp.SQRT  -> Mux(index(6), sqrtOddLUT(index(5, 0)), sqrtEvenLUT(index(5, 0))),
-    SFUOp.RSQRT -> Mux(index(6), rsqrtOddLUT(index(5, 0)), rsqrtEvenLUT(index(5, 0)))
+    SFUOp.RSQRT -> Mux(index(6), rsqrtOddLUT(index(5, 0)), rsqrtEvenLUT(index(5, 0))),
+    SFUOp.SIN   -> sinLUT(index(5, 0)),
+    SFUOp.COS   -> sinLUT(index(5, 0))
   ))
  
-  val s1 = Wire(Decoupled(new OutBundle))
+  val s1 = Wire(Decoupled(new LookupToPoly))
   val s1Pipe = s1.handshakePipeIf(true)
  
   io.in.ready        := s1.ready
@@ -364,29 +422,20 @@ class LookupTable[T <: Bundle](throughoutGen: => T) extends Module {
   s1.bits.c0         := entry.c0
   s1.bits.c1         := entry.c1
   s1.bits.c2         := entry.c2
-  s1.bits.throughout := io.in.bits.throughout
+  s1.bits.op         := io.in.bits.op
+  s1.bits.xl         := io.in.bits.xl
+  s1.bits.exp        := io.in.bits.exp
+  s1.bits.sign       := io.in.bits.sign
+  s1.bits.bypass     := io.in.bits.bypass
+  s1.bits.bypassVal  := io.in.bits.bypassVal
  
   io.out <> s1Pipe
 }
 
-class Poly[T <: Bundle](throughoutGen: => T) extends Module {
-  class InBundle extends Bundle {
-    val c0         = SInt(27.W)
-    val c1         = SInt(17.W)
-    val c2         = SInt(13.W)
-    val xl         = UInt(17.W)
-    val op         = UInt(3.W)
-    val throughout = throughoutGen.cloneType
-  }
- 
-  class OutBundle extends Bundle {
-    val result     = UInt(26.W)
-    val throughout = throughoutGen.cloneType
-  }
- 
+class Poly extends Module {
   val io = IO(new Bundle {
-    val in  = Flipped(Decoupled(new InBundle))
-    val out = Decoupled(new OutBundle)
+    val in  = Flipped(Decoupled(new LookupToPoly))
+    val out = Decoupled(new PolyToCompose)
   })
  
   // Stage 1: Compute and truncate xl^2
@@ -395,13 +444,16 @@ class Poly[T <: Bundle](throughoutGen: => T) extends Module {
   val aligned0 = (xl2 >> shift0)(14, 0)
  
   val s1 = Wire(Decoupled(new Bundle {
-    val op         = UInt(3.W)
-    val c0         = SInt(27.W)
-    val c1         = SInt(17.W)
-    val c2         = SInt(13.W)
-    val xl         = UInt(17.W)
-    val xl2        = UInt(15.W)
-    val throughout = throughoutGen.cloneType
+    val op        = UInt(3.W)
+    val c0        = SInt(27.W)
+    val c1        = SInt(17.W)
+    val c2        = SInt(13.W)
+    val xl        = UInt(17.W)
+    val xl2       = UInt(15.W)
+    val exp       = SInt(8.W)
+    val sign      = UInt(1.W)
+    val bypass    = Bool()
+    val bypassVal = UInt(32.W)
   }))
   val s1Pipe = s1.handshakePipeIf(true)
  
@@ -413,7 +465,10 @@ class Poly[T <: Bundle](throughoutGen: => T) extends Module {
   s1.bits.xl         := io.in.bits.xl
   s1.bits.xl2        := aligned0
   s1.bits.op         := io.in.bits.op
-  s1.bits.throughout := io.in.bits.throughout
+  s1.bits.exp        := io.in.bits.exp
+  s1.bits.sign       := io.in.bits.sign
+  s1.bits.bypass     := io.in.bits.bypass
+  s1.bits.bypassVal  := io.in.bits.bypassVal
  
   // Stage 2: Multiply
   val xlSigned  = Cat(0.U(1.W), s1Pipe.bits.xl).asSInt
@@ -423,11 +478,14 @@ class Poly[T <: Bundle](throughoutGen: => T) extends Module {
   val c1Xl  = s1Pipe.bits.c1 * xlSigned
  
   val s2 = Wire(Decoupled(new Bundle {
-    val op         = UInt(3.W)
-    val c0         = SInt(27.W)
-    val c1Xl       = SInt(35.W)
-    val c2Xl2      = SInt(29.W)
-    val throughout = throughoutGen.cloneType
+    val op        = UInt(3.W)
+    val c0        = SInt(27.W)
+    val c1Xl      = SInt(35.W)
+    val c2Xl2     = SInt(29.W)
+    val exp       = SInt(8.W)
+    val sign      = UInt(1.W)
+    val bypass    = Bool()
+    val bypassVal = UInt(32.W)
   }))
   val s2Pipe = s2.handshakePipeIf(true)
  
@@ -436,7 +494,10 @@ class Poly[T <: Bundle](throughoutGen: => T) extends Module {
   s2.bits.c0         := s1Pipe.bits.c0
   s2.bits.c1Xl       := c1Xl
   s2.bits.c2Xl2      := c2Xl2
-  s2.bits.throughout := s1Pipe.bits.throughout
+  s2.bits.exp        := s1Pipe.bits.exp
+  s2.bits.sign       := s1Pipe.bits.sign
+  s2.bits.bypass     := s1Pipe.bits.bypass
+  s2.bits.bypassVal  := s1Pipe.bits.bypassVal
   s1Pipe.ready       := s2.ready
  
   // Stage 3: Align And Sum
@@ -446,179 +507,107 @@ class Poly[T <: Bundle](throughoutGen: => T) extends Module {
   val aligned1 = (s2Pipe.bits.c1Xl  >> shift1).asSInt
   val aligned2 = (s2Pipe.bits.c2Xl2 >> shift2).asSInt
  
-  val result = (s2Pipe.bits.c0 + aligned1 + aligned2)(25, 0)
+  val result = (s2Pipe.bits.c0 + aligned1 + aligned2)(26, 0)
  
-  val s3     = Wire(Decoupled(new OutBundle))
+  val s3     = Wire(Decoupled(new PolyToCompose))
   val s3Pipe = s3.handshakePipeIf(true)
  
   s3.valid           := s2Pipe.valid
   s2Pipe.ready       := s3.ready
-  s3.bits.result     := result
-  s3.bits.throughout := s2Pipe.bits.throughout
+  s3.bits.polyResult := result
+  s3.bits.op         := s2Pipe.bits.op
+  s3.bits.exp        := s2Pipe.bits.exp
+  s3.bits.sign       := s2Pipe.bits.sign
+  s3.bits.bypass     := s2Pipe.bits.bypass
+  s3.bits.bypassVal  := s2Pipe.bits.bypassVal
  
   io.out <> s3Pipe
 }
 
-class Compose[T <: Bundle](throughoutGen: => T) extends Module {
-  class InBundle extends Bundle {
-    val exp        = SInt(8.W)
-    val polyResult = UInt(26.W)  // x xxxxxxxxxxxxxxxxxxxxxxxxxx the first x is always 1 except log2
-    val bypass     = Bool()
-    val bypassVal  = UInt(32.W)
-    val op         = UInt(3.W)
-    val throughout = throughoutGen.cloneType
-  }
- 
-  class OutBundle extends Bundle {
-    val result     = UInt(32.W)
-    val throughout = throughoutGen.cloneType
-  }
- 
+class Compose extends Module {
   val io = IO(new Bundle {
-    val in  = Flipped(Decoupled(new InBundle))
-    val out = Decoupled(new OutBundle)
+    val in  = Flipped(Decoupled(new PolyToCompose))
+    val out = Decoupled(new SFUOutput)
   })
 
+  val sign       = io.in.bits.sign
   val exp        = io.in.bits.exp
   val polyResult = io.in.bits.polyResult
 
-  // log2 special compose
-  val sign    = exp(7)
-  val sum     = Cat(exp.asUInt, polyResult)
-  val sumAbs  = Mux(sign, (~sum + 1.U(34.W)), sum)
+  // log2 sin ans cos special compose
+  val sum     = Cat(exp.asUInt, polyResult(25, 0))
+  val sumAbs  = Mux(exp(7), (~sum + 1.U(34.W)), sum)
   val lzd     = PriorityEncoder(Reverse(sumAbs))
 
-  val signLog2 = sign
+  val signLog2 = exp(7)
   val expLog2  = (134.U(8.W) - lzd)(7, 0)
   val mantLog2 = (sumAbs << lzd)(32, 10)
 
-  val expExp2  = (exp + 127.S).asUInt(7, 0)
+  val expSin   = (134.U(8.W) - lzd).asUInt(7, 0)
+  val mantSin  = (sumAbs << lzd)(32, 10)
+
+  val expExp2  = (127.S + exp).asUInt(7, 0)
   val mantExp2 = polyResult(24, 2)
 
   val expRcp   = (126.S - exp).asUInt(7, 0)
   val mantRcp  = polyResult(24, 2)
 
-  val expSqrt  = (127.S + (exp >> 1)).asUInt(7, 0)
+  val expSqrt  = (127.S + exp).asUInt(7, 0)
   val mantSqrt = polyResult(24, 2)
 
-  val expRsqrt  = (126.S - (exp >> 1)).asUInt(7, 0)
+  val expRsqrt  = (126.S - exp).asUInt(7, 0)
   val mantRsqrt = polyResult(24, 2)
 
   val result = MuxLookup(io.in.bits.op, 0.U(32.W)) (Seq(
     SFUOp.EXP2  -> Cat(0.U(1.W), expExp2, mantExp2),
     SFUOp.LOG2  -> Cat(signLog2.asUInt, expLog2, mantLog2),
-    SFUOp.RCP   -> Cat(0.U(1.W), expRcp, mantRcp),
+    SFUOp.RCP   -> Cat(sign, expRcp, mantRcp),
     SFUOp.SQRT  -> Cat(0.U(1.W), expSqrt, mantSqrt),
-    SFUOp.RSQRT -> Cat(0.U(1.W), expRsqrt, mantRsqrt)
+    SFUOp.RSQRT -> Cat(0.U(1.W), expRsqrt, mantRsqrt),
+    SFUOp.SIN   -> Mux(polyResult(26), Cat(sign, 127.U(8.W) , 0.U(23.W)), Cat(sign, expSin, mantSin)),
+    SFUOp.COS   -> Mux(polyResult(26), Cat(sign, 127.U(8.W) , 0.U(23.W)), Cat(sign, expSin, mantSin))
   ))
 
-  val s1     = Wire(Decoupled(new OutBundle))
+  val s1     = Wire(Decoupled(new SFUOutput))
   val s1Pipe = s1.handshakePipeIf(true)
   io.in.ready        := s1.ready
   s1.valid           := io.in.valid
   s1.bits.result     := Mux(io.in.bits.bypass, io.in.bits.bypassVal, result)
-  s1.bits.throughout := io.in.bits.throughout
 
   io.out <> s1Pipe
 }
 
 class SFU extends Module {
-  class InBundle extends Bundle {
-    val x  = UInt(32.W)
-    val op = UInt(3.W)
-  }
-  class OutBundle extends Bundle {
-    val result = UInt(32.W)
-  }
   val io = IO(new Bundle {
-    val in  = Flipped(Decoupled(new InBundle))
-    val out = Decoupled(new OutBundle)
+    val in  = Flipped(Decoupled(new SFUInput))
+    val out = Decoupled(new SFUOutput)
   })
   
   // Stage 0: Filter
-  class S0Bundle extends Bundle {
-    val op = UInt(3.W)
-  }
-  
-  val filter = Module(new Filter[S0Bundle](new S0Bundle))
-  io.in.ready                     := filter.io.in.ready
-  filter.io.in.valid              := io.in.valid
-  filter.io.in.bits.x             := io.in.bits.x
-  filter.io.in.bits.op            := io.in.bits.op
-  filter.io.in.bits.throughout.op := io.in.bits.op
+  val filter = Module(new Filter)
+  io.in.ready        := filter.io.in.ready
+  filter.io.in.valid := io.in.valid
+  filter.io.in.bits  := io.in.bits
  
   // Stage 1: RangeReduce
-  class S1Bundle extends Bundle {
-    val op        = UInt(3.W)
-    val bypass    = Bool()
-    val bypassVal = UInt(32.W)
-  }
- 
-  val rangeReduce = Module(new RangeReduce[S1Bundle](new S1Bundle))
-  filter.io.out.ready                         := rangeReduce.io.in.ready
-  rangeReduce.io.in.valid                     := filter.io.out.valid
-  rangeReduce.io.in.bits.sign                 := filter.io.out.bits.sign
-  rangeReduce.io.in.bits.exponent             := filter.io.out.bits.exponent
-  rangeReduce.io.in.bits.mantissa             := filter.io.out.bits.mantissa
-  rangeReduce.io.in.bits.op                   := filter.io.out.bits.throughout.op
-  rangeReduce.io.in.bits.throughout.op        := filter.io.out.bits.throughout.op
-  rangeReduce.io.in.bits.throughout.bypass    := filter.io.out.bits.bypass
-  rangeReduce.io.in.bits.throughout.bypassVal := filter.io.out.bits.bypassVal
+  val rangeReduce = Module(new RangeReduce)
+  rangeReduce.io.in <> filter.io.out
  
   // Stage 2: LUT
-  class S2Bundle extends Bundle {
-    val op        = UInt(3.W)
-    val xl        = UInt(17.W)
-    val exp       = SInt(8.W)
-    val bypass    = Bool()
-    val bypassVal = UInt(32.W)
-  }
- 
-  val lut = Module(new LookupTable[S2Bundle](new S2Bundle))
-  rangeReduce.io.out.ready            := lut.io.in.ready
-  lut.io.in.valid                     := rangeReduce.io.out.valid
-  lut.io.in.bits.op                   := rangeReduce.io.out.bits.throughout.op
-  lut.io.in.bits.index                := rangeReduce.io.out.bits.index
-  lut.io.in.bits.throughout.op        := rangeReduce.io.out.bits.throughout.op
-  lut.io.in.bits.throughout.xl        := rangeReduce.io.out.bits.xl
-  lut.io.in.bits.throughout.exp       := rangeReduce.io.out.bits.exp
-  lut.io.in.bits.throughout.bypass    := rangeReduce.io.out.bits.throughout.bypass
-  lut.io.in.bits.throughout.bypassVal := rangeReduce.io.out.bits.throughout.bypassVal
+  val lut = Module(new LookupTable)
+  lut.io.in <> rangeReduce.io.out
  
   // Stage 3-5: Poly (3 cycles)
-  class S3Bundle extends Bundle {
-    val op        = UInt(3.W)
-    val exp       = SInt(8.W)
-    val bypass    = Bool()
-    val bypassVal = UInt(32.W)
-  }
- 
-  val poly = Module(new Poly[S3Bundle](new S3Bundle))
-  lut.io.out.ready                     := poly.io.in.ready
-  poly.io.in.valid                     := lut.io.out.valid
-  poly.io.in.bits.c0                   := lut.io.out.bits.c0
-  poly.io.in.bits.c1                   := lut.io.out.bits.c1
-  poly.io.in.bits.c2                   := lut.io.out.bits.c2
-  poly.io.in.bits.xl                   := lut.io.out.bits.throughout.xl
-  poly.io.in.bits.op                   := lut.io.out.bits.throughout.op
-  poly.io.in.bits.throughout.op        := lut.io.out.bits.throughout.op
-  poly.io.in.bits.throughout.exp       := lut.io.out.bits.throughout.exp
-  poly.io.in.bits.throughout.bypass    := lut.io.out.bits.throughout.bypass
-  poly.io.in.bits.throughout.bypassVal := lut.io.out.bits.throughout.bypassVal
+  val poly = Module(new Poly)
+  poly.io.in <> lut.io.out
  
   // Stage 6: Compose
-  val compose = Module(new Compose[Bundle](new Bundle {}))
-  poly.io.out.ready             := compose.io.in.ready
-  compose.io.in.valid           := poly.io.out.valid
-  compose.io.in.bits.exp        := poly.io.out.bits.throughout.exp
-  compose.io.in.bits.polyResult := poly.io.out.bits.result
-  compose.io.in.bits.bypass     := poly.io.out.bits.throughout.bypass
-  compose.io.in.bits.bypassVal  := poly.io.out.bits.throughout.bypassVal
-  compose.io.in.bits.op         := poly.io.out.bits.throughout.op
- 
+  val compose = Module(new Compose)
+  compose.io.in <> poly.io.out
+
   compose.io.out.ready := io.out.ready
   io.out.valid         := compose.io.out.valid
-  io.out.bits.result   := compose.io.out.bits.result
+  io.out.bits          := compose.io.out.bits
 }
 
 object SFUGen extends App {

@@ -13,7 +13,7 @@ uint64_t TestUtils::compute_ulp(float golden, float test) {
 
   if (g_nan && t_nan)
     return 0;
-  if (g_inf && t_inf && ((g_bits & 0x80000000) == (t_bits & 0x80000000)))
+  if (g_inf && t_inf && (std::signbit(golden) == std::signbit(test)))
     return 0;
   if (golden == test)
     return 0;
@@ -34,11 +34,30 @@ uint64_t TestUtils::compute_ulp(float golden, float test) {
 double TestUtils::float_to_double(float x) { return static_cast<double>(x); }
 
 double TestUtils::compute_abs_error(double golden, double test) {
+  bool g_nan = std::isnan(golden);
+  bool t_nan = std::isnan(test);
+  bool g_inf = std::isinf(golden);
+  bool t_inf = std::isinf(test);
+
+  if (g_nan && t_nan)
+    return 0.0;
+  if (g_inf && t_inf && (std::signbit(golden) == std::signbit(test)))
+    return 0.0;
+
   return std::fabs(test - golden);
 }
 
 double TestUtils::compute_rel_error(double golden, double test) {
-  if (golden == 0.0)
+  bool g_nan = std::isnan(golden);
+  bool t_nan = std::isnan(test);
+  bool g_inf = std::isinf(golden);
+  bool t_inf = std::isinf(test);
+
+  if (g_nan && t_nan)
     return 0.0;
+  if (g_inf && t_inf && (std::signbit(golden) == std::signbit(test)))
+    return 0.0;
+  if (golden == 0.0)
+    return std::fabs(test);
   return std::fabs((test - golden) / golden);
 }

@@ -11,6 +11,7 @@ std::vector<LUTEntry> SFULUT::sqrt_even_lut;
 std::vector<LUTEntry> SFULUT::sqrt_odd_lut;
 std::vector<LUTEntry> SFULUT::rsqrt_even_lut;
 std::vector<LUTEntry> SFULUT::rsqrt_odd_lut;
+std::vector<LUTEntry> SFULUT::sin_lut;
 
 std::vector<LUTEntry> SFULUT::load_lut(const char *filename, int num_entries) {
   std::vector<LUTEntry> lut;
@@ -48,11 +49,13 @@ void SFULUT::init() {
   sqrt_odd_lut = load_lut((base_path + "/sqrt-odd-coeffs.txt").c_str(), 64);
   rsqrt_even_lut = load_lut((base_path + "/rsqrt-even-coeffs.txt").c_str(), 64);
   rsqrt_odd_lut = load_lut((base_path + "/rsqrt-odd-coeffs.txt").c_str(), 64);
+  sin_lut = load_lut((base_path + "/sin-coeffs.txt").c_str(), 64);
 }
 
 LUTOutput SFULUT::lookup(const RangeReduceOutput &input, SFUOp op) {
   LUTOutput out;
   out.xl = input.xl;
+  out.sign = input.sign;
   out.exp = input.exp;
 
   const FunctionParams &params = Function::get(op);
@@ -81,6 +84,11 @@ LUTOutput SFULUT::lookup(const RangeReduceOutput &input, SFUOp op) {
 
   case SFUOp::RSQRT:
     lut_ptr = (input.index & 0x40) ? &rsqrt_odd_lut : &rsqrt_even_lut;
+    index &= 0x3F;
+    break;
+  case SFUOp::SIN:
+  case SFUOp::COS:
+    lut_ptr = &sin_lut;
     index &= 0x3F;
     break;
   }

@@ -3,4 +3,5 @@
 **/.nvim/
 **/EDA_tool/
 **/*.json
-**/.cache
+**/.cache/
+**/result/

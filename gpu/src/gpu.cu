@@ -30,6 +30,12 @@ __global__ void sfu_kernel(const float *inputs, float *outputs, int n, int op) {
   case 4:
     result = rsqrtf(input);
     break;
+  case 5:
+    result = sinf(input);
+    break;
+  case 6:
+    result = cosf(input);
+    break;
   default:
     result = 0.0f;
   }

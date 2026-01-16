@@ -113,14 +113,14 @@ generate_function("rcp",
 printf("=== SQRT-EVEN ===\n"):
 generate_function("sqrt-even",
     x_base -> sqrt(x_base + r) / 2,
-    (seg_idx, m) -> 1 + seg_idx / 2^m,
+    (seg_idx, m) -> 1.0 + seg_idx / 2^m,
     6, 0, -1, -3):
 
 # SQRT-ODD: sqrt(x), x in [0.5,1)
 printf("=== SQRT-ODD ===\n"):
 generate_function("sqrt-odd",
     x_base -> sqrt(x_base + r) / sqrt(2),
-    (seg_idx, m) -> 1 + seg_idx / 2^m,
+    (seg_idx, m) -> 1.0 + seg_idx / 2^m,
     6, 0, -1, -3):
 
 # RSQRT-EVEN: 1/sqrt(x), x in [1,2)
@@ -136,5 +136,12 @@ generate_function("rsqrt-odd",
     x_base -> 1 / sqrt(2) / sqrt(x_base + r),
     (seg_idx, m) -> 1.0 + seg_idx / 2^m,
     6, 0, -1, -1):
+
+# SIN: sin(pi/2 * t), t in [0,1)
+printf("=== SIN ===\n"):
+generate_function("sin",
+    x_base -> sin(Pi/2 * (x_base + r)),
+    (seg_idx, m) -> seg_idx / 2^m,
+    6, 0, 1, 1):
 
 printf("=== ALL DONE ===\n"):

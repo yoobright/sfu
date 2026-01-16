@@ -2,8 +2,17 @@
 #define SFU_TYPES_H
 
 #include <cstdint>
+#include <cstdio>
 
-enum class SFUOp { EXP2 = 0, LOG2 = 1, RCP = 2, SQRT = 3, RSQRT = 4 };
+enum class SFUOp {
+  EXP2 = 0,
+  LOG2 = 1,
+  RCP = 2,
+  SQRT = 3,
+  RSQRT = 4,
+  SIN = 5,
+  COS = 6
+};
 
 struct SFUConfig {
   static constexpr int c0_width = 26;
@@ -16,6 +25,8 @@ struct FunctionParams {
   int m;
   int c0_sign, c1_sign, c2_sign;
   int c0_exp, c1_exp, c2_exp;
+
+  int shift0() const { return (23 - m) * 2 - SFUConfig::squarer_output_width; }
 
   int shift1() const {
     int c0_real_exp = c0_exp - SFUConfig::c0_width + 1;
@@ -39,6 +50,7 @@ public:
   static const FunctionParams RCP;
   static const FunctionParams SQRT;
   static const FunctionParams RSQRT;
+  static const FunctionParams SIN;
 
   static const FunctionParams &get(SFUOp op);
 };
@@ -54,6 +66,7 @@ struct FilterOutput {
 struct RangeReduceOutput {
   uint8_t index;
   uint32_t xl;
+  uint8_t sign;
   int8_t exp;
 };
 
@@ -62,11 +75,13 @@ struct LUTOutput {
   int32_t c1;
   int32_t c2;
   uint32_t xl;
+  uint8_t sign;
   int8_t exp;
 };
 
 struct PolyOutput {
   uint32_t result;
+  uint8_t sign;
   int8_t exp;
 };
 

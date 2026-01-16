@@ -4,11 +4,19 @@
 #include "sfu_lut.h"
 #include "sfu_poly.h"
 #include "sfu_range_reduce.h"
+#include <cmath>
 #include <cstring>
+
+static constexpr float INV_PI_2 = 2.0f / static_cast<float>(M_PI);
 
 void SFUCore::init() { SFULUT::init(); }
 
 float SFUCore::compute(float input, SFUOp op) {
+
+  if (op == SFUOp::SIN || op == SFUOp::COS) {
+    input = input * INV_PI_2;
+  }
+
   uint32_t input_bits;
   memcpy(&input_bits, &input, sizeof(float));
 

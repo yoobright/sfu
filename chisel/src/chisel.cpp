@@ -1,7 +1,10 @@
 #include "chisel.h"
 #include "VSFU.h"
 #include "verilated.h"
+#include <cmath>
 #include <cstring>
+
+static constexpr float INV_PI_2 = 2.0f / static_cast<float>(M_PI);
 
 static VSFU *top = nullptr;
 static VerilatedContext *contextp = nullptr;
@@ -30,32 +33,9 @@ void Chisel::cleanup() {
 }
 
 float Chisel::compute(float input, SFUOp op) {
-  uint32_t input_bits;
-  memcpy(&input_bits, &input, sizeof(float));
+  float result = 0.0f;
 
-  top->io_in_valid = 1;
-  top->io_in_bits_x = input_bits;
-  top->io_in_bits_op = static_cast<uint8_t>(op);
-  top->io_out_ready = 1;
-
-  top->clock = 0;
-  top->eval();
-  top->clock = 1;
-  top->eval();
-
-  top->io_in_valid = 0;
-
-  int timeout = 1000;
-  while (!top->io_out_valid && timeout-- > 0) {
-    top->clock = 0;
-    top->eval();
-    top->clock = 1;
-    top->eval();
-  }
-
-  uint32_t result_bits = top->io_out_bits_result;
-  float result;
-  memcpy(&result, &result_bits, sizeof(float));
+  compute_batch(&input, &result, 1, op);
 
   return result;
 }
@@ -63,6 +43,7 @@ float Chisel::compute(float input, SFUOp op) {
 void Chisel::compute_batch(const float *inputs, float *outputs, size_t n,
                            SFUOp op) {
   uint32_t input_bits = 0;
+  float input = 0.0f;
   float result = 0.0f;
   size_t issued = 0;
   size_t received = 0;
@@ -74,7 +55,12 @@ void Chisel::compute_batch(const float *inputs, float *outputs, size_t n,
 
   while (received < n) {
     if (issued < n) {
-      memcpy(&input_bits, &inputs[issued], sizeof(float));
+      if (op == SFUOp::SIN || op == SFUOp::COS) {
+        input = inputs[issued] * INV_PI_2;
+      } else {
+        input = inputs[issued];
+      }
+      memcpy(&input_bits, &input, sizeof(float));
 
       top->io_in_valid = 1;
       top->io_in_bits_x = input_bits;

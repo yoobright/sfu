@@ -50,40 +50,51 @@
   `endif // not def ENABLE_INITIAL_MEM_
 `endif // not def SYNTHESIS
 
-module Filter(	// scala/SFU.scala:122:7
-  input         clock,	// scala/SFU.scala:122:7
-                reset,	// scala/SFU.scala:122:7
-  output        io_in_ready,	// scala/SFU.scala:136:14
-  input         io_in_valid,	// scala/SFU.scala:136:14
-  input  [31:0] io_in_bits_x,	// scala/SFU.scala:136:14
-  input  [2:0]  io_in_bits_op,	// scala/SFU.scala:136:14
-                io_in_bits_throughout_op,	// scala/SFU.scala:136:14
-  input         io_out_ready,	// scala/SFU.scala:136:14
-  output        io_out_valid,	// scala/SFU.scala:136:14
-                io_out_bits_sign,	// scala/SFU.scala:136:14
-  output [7:0]  io_out_bits_exponent,	// scala/SFU.scala:136:14
-  output [22:0] io_out_bits_mantissa,	// scala/SFU.scala:136:14
-  output        io_out_bits_bypass,	// scala/SFU.scala:136:14
-  output [31:0] io_out_bits_bypassVal,	// scala/SFU.scala:136:14
-  output [2:0]  io_out_bits_throughout_op	// scala/SFU.scala:136:14
+module Filter(	// scala/SFU.scala:180:7
+  input         clock,	// scala/SFU.scala:180:7
+                reset,	// scala/SFU.scala:180:7
+  output        io_in_ready,	// scala/SFU.scala:181:14
+  input         io_in_valid,	// scala/SFU.scala:181:14
+  input  [31:0] io_in_bits_x,	// scala/SFU.scala:181:14
+  input  [2:0]  io_in_bits_op,	// scala/SFU.scala:181:14
+  input         io_out_ready,	// scala/SFU.scala:181:14
+  output        io_out_valid,	// scala/SFU.scala:181:14
+                io_out_bits_sign,	// scala/SFU.scala:181:14
+  output [7:0]  io_out_bits_exponent,	// scala/SFU.scala:181:14
+  output [22:0] io_out_bits_mantissa,	// scala/SFU.scala:181:14
+  output [2:0]  io_out_bits_op,	// scala/SFU.scala:181:14
+  output        io_out_bits_bypass,	// scala/SFU.scala:181:14
+  output [31:0] io_out_bits_bypassVal	// scala/SFU.scala:181:14
 );
 
-  reg              s1Pipe_rValid;	// scala/SFU.scala:100:29
-  reg              s1Pipe_rBits_sign;	// scala/SFU.scala:101:25
-  reg  [7:0]       s1Pipe_rBits_exponent;	// scala/SFU.scala:101:25
-  reg  [22:0]      s1Pipe_rBits_mantissa;	// scala/SFU.scala:101:25
-  reg              s1Pipe_rBits_bypass;	// scala/SFU.scala:101:25
-  reg  [31:0]      s1Pipe_rBits_bypassVal;	// scala/SFU.scala:101:25
-  reg  [2:0]       s1Pipe_rBits_throughout_op;	// scala/SFU.scala:101:25
-  wire             s1_ready = ~s1Pipe_rValid | io_out_ready;	// scala/SFU.scala:100:29, :102:{35,43}
-  wire             isZero = io_in_bits_x[30:23] == 8'h0;	// scala/SFU.scala:142:23, :145:21
-  wire             isInf = (&(io_in_bits_x[30:23])) & io_in_bits_x[22:0] == 23'h0;	// scala/SFU.scala:142:23, :143:23, :146:{21,34,40}
-  wire             isNaN = (&(io_in_bits_x[30:23])) & (|(io_in_bits_x[22:0]));	// scala/SFU.scala:142:23, :143:23, :146:21, :147:{34,40}
-  wire             tooBig = ~(io_in_bits_x[31]) & io_in_bits_x > 32'h43000000;	// scala/SFU.scala:141:23, :150:{17,21,38}
-  wire [7:0][31:0] _GEN =
+  reg              s1Pipe_rValid;	// scala/SFU.scala:109:29
+  reg              s1Pipe_rBits_sign;	// scala/SFU.scala:110:25
+  reg  [7:0]       s1Pipe_rBits_exponent;	// scala/SFU.scala:110:25
+  reg  [22:0]      s1Pipe_rBits_mantissa;	// scala/SFU.scala:110:25
+  reg  [2:0]       s1Pipe_rBits_op;	// scala/SFU.scala:110:25
+  reg              s1Pipe_rBits_bypass;	// scala/SFU.scala:110:25
+  reg  [31:0]      s1Pipe_rBits_bypassVal;	// scala/SFU.scala:110:25
+  wire             s1_ready = ~s1Pipe_rValid | io_out_ready;	// scala/SFU.scala:109:29, :111:{35,43}
+  wire             isZero = io_in_bits_x[30:23] == 8'h0;	// scala/SFU.scala:187:23, :190:21
+  wire             isInf = (&(io_in_bits_x[30:23])) & io_in_bits_x[22:0] == 23'h0;	// scala/SFU.scala:187:23, :188:23, :191:{21,34,40}
+  wire             isNaN = (&(io_in_bits_x[30:23])) & (|(io_in_bits_x[22:0]));	// scala/SFU.scala:187:23, :188:23, :191:21, :192:{34,40}
+  wire             _tooNeg_T = io_in_bits_x[30:23] > 8'h85;	// scala/SFU.scala:187:23, :195:27
+  wire             tooBig = ~(io_in_bits_x[31]) & _tooNeg_T;	// scala/SFU.scala:186:23, :195:{17,21,27}
+  wire             _GEN = isInf | isNaN;	// scala/SFU.scala:191:34, :192:34, src/main/scala/chisel3/util/Mux.scala:126:16
+  wire             _GEN_0 = io_in_bits_op == 3'h6 & (isZero | isInf | isNaN);	// scala/SFU.scala:190:21, :191:34, :192:34, :248:{28,43}, :249:{15,34}, :256:15
+  wire [7:0]       _GEN_1 =
+    {{_GEN_0},
+     {_GEN_0},
+     {isZero | isInf | isNaN},
+     {io_in_bits_x[31] | isZero | isInf | isNaN},
+     {io_in_bits_x[31] | isZero | isInf | isNaN},
+     {isZero | isNaN | isInf},
+     {io_in_bits_x[31] | isZero | isInf | isNaN},
+     {isZero | isInf | isNaN | tooBig | io_in_bits_x[31] & _tooNeg_T}};	// scala/SFU.scala:186:23, :190:21, :191:34, :192:34, :195:{21,27}, :196:21, :201:{22,38}, :202:{15,53}, :210:{28,44}, :211:{15,43}, :218:{28,43}, :219:{15,34}, :225:{28,44}, :226:{15,43}, :233:{28,45}, :234:{15,43}, :241:{28,43}, :242:{15,34}, :248:43, :249:15, :256:15
+  wire [7:0][31:0] _GEN_2 =
     {{32'h0},
-     {32'h0},
-     {32'h0},
+     {isZero | ~_GEN ? 32'h3F800000 : 32'h7FFFFFFF},
+     {isZero ? {io_in_bits_x[31], 31'h0} : _GEN ? 32'h7FFFFFFF : 32'h0},
      {io_in_bits_x[31]
         ? 32'h7FFFFFFF
         : isZero ? 32'h7F800000 : isInf | ~isNaN ? 32'h0 : 32'h7FFFFFFF},
@@ -100,222 +111,424 @@ module Filter(	// scala/SFU.scala:122:7
         ? 32'h3F800000
         : isInf
             ? (io_in_bits_x[31] ? 32'h0 : 32'h7F800000)
-            : isNaN ? 32'h7FFFFFFF : tooBig ? 32'h7F800000 : 32'h0}};	// scala/SFU.scala:141:23, :145:21, :146:34, :147:34, :150:21, :156:{23,39}, :158:15, :160:21, :165:{30,46}, :167:15, :173:{30,45}, :175:15, :176:20, :178:20, :180:{30,46}, :182:15, :188:{30,47}, :190:15, :198:15, src/main/scala/chisel3/util/Mux.scala:126:16
-  wire             _s1Pipe_T = s1_ready & io_in_valid;	// scala/SFU.scala:102:43, src/main/scala/chisel3/util/Decoupled.scala:51:35
-  always @(posedge clock) begin	// scala/SFU.scala:122:7
-    if (reset)	// scala/SFU.scala:122:7
-      s1Pipe_rValid <= 1'h0;	// scala/SFU.scala:100:29, :145:21
-    else	// scala/SFU.scala:122:7
-      s1Pipe_rValid <= _s1Pipe_T | ~(io_out_ready & s1Pipe_rValid) & s1Pipe_rValid;	// scala/SFU.scala:100:29, :105:36, :107:18, :108:31, :109:18, src/main/scala/chisel3/util/Decoupled.scala:51:35
+            : isNaN ? 32'h7FFFFFFF : tooBig ? 32'h7F800000 : 32'h0}};	// scala/SFU.scala:186:23, :190:21, :191:34, :192:34, :195:21, :201:{22,38}, :203:15, :205:21, :210:{28,44}, :212:15, :218:{28,43}, :220:15, :221:20, :223:20, :225:{28,44}, :227:15, :233:{28,45}, :235:15, :241:{28,43}, :243:15, :244:20, :248:{28,43}, :250:15, :257:15, src/main/scala/chisel3/util/Mux.scala:126:16
+  wire             _s1Pipe_T = s1_ready & io_in_valid;	// scala/SFU.scala:111:43, src/main/scala/chisel3/util/Decoupled.scala:51:35
+  always @(posedge clock) begin	// scala/SFU.scala:180:7
+    if (reset)	// scala/SFU.scala:180:7
+      s1Pipe_rValid <= 1'h0;	// scala/SFU.scala:109:29, :190:21
+    else	// scala/SFU.scala:180:7
+      s1Pipe_rValid <= _s1Pipe_T | ~(io_out_ready & s1Pipe_rValid) & s1Pipe_rValid;	// scala/SFU.scala:109:29, :114:36, :116:18, :117:31, :118:18, src/main/scala/chisel3/util/Decoupled.scala:51:35
     if (_s1Pipe_T) begin	// src/main/scala/chisel3/util/Decoupled.scala:51:35
-      s1Pipe_rBits_sign <= io_in_bits_x[31];	// scala/SFU.scala:101:25, :141:23
-      s1Pipe_rBits_exponent <= io_in_bits_x[30:23];	// scala/SFU.scala:101:25, :142:23
-      s1Pipe_rBits_mantissa <= io_in_bits_x[22:0];	// scala/SFU.scala:101:25, :143:23
-      s1Pipe_rBits_bypass <=
-        io_in_bits_op == 3'h0
-          ? isZero | isInf | isNaN | tooBig | io_in_bits_x[31]
-            & io_in_bits_x > 32'hC3000000
-          : io_in_bits_op == 3'h1
-              ? io_in_bits_x[31] | isZero | isInf | isNaN
-              : io_in_bits_op == 3'h2
-                  ? isZero | isNaN | isInf
-                  : io_in_bits_op == 3'h3
-                      ? io_in_bits_x[31] | isZero | isInf | isNaN
-                      : io_in_bits_op == 3'h4
-                        & (io_in_bits_x[31] | isZero | isInf | isNaN);	// scala/SFU.scala:101:25, :141:23, :145:21, :146:34, :147:34, :150:21, :151:{21,38}, :156:{23,39}, :157:{15,53}, :165:{30,46}, :166:{15,43}, :173:{30,45}, :174:{15,34}, :180:{30,46}, :181:{15,43}, :188:{30,47}, :189:{15,43}, :197:15
-      s1Pipe_rBits_bypassVal <= _GEN[io_in_bits_op];	// scala/SFU.scala:101:25, :156:{23,39}, :158:15, :165:{30,46}, :167:15, :173:{30,45}, :175:15, :180:{30,46}, :182:15, :188:{30,47}, :190:15, :198:15
-      s1Pipe_rBits_throughout_op <= io_in_bits_throughout_op;	// scala/SFU.scala:101:25
+      s1Pipe_rBits_sign <= io_in_bits_x[31];	// scala/SFU.scala:110:25, :186:23
+      s1Pipe_rBits_exponent <= io_in_bits_x[30:23];	// scala/SFU.scala:110:25, :187:23
+      s1Pipe_rBits_mantissa <= io_in_bits_x[22:0];	// scala/SFU.scala:110:25, :188:23
+      s1Pipe_rBits_op <= io_in_bits_op;	// scala/SFU.scala:110:25
+      s1Pipe_rBits_bypass <= _GEN_1[io_in_bits_op];	// scala/SFU.scala:110:25, :201:{22,38}, :202:15, :210:{28,44}, :211:15, :218:{28,43}, :219:15, :225:{28,44}, :226:15, :233:{28,45}, :234:15, :241:{28,43}, :242:15, :248:43
+      s1Pipe_rBits_bypassVal <= _GEN_2[io_in_bits_op];	// scala/SFU.scala:110:25, :201:{22,38}, :203:15, :210:{28,44}, :212:15, :218:{28,43}, :220:15, :225:{28,44}, :227:15, :233:{28,45}, :235:15, :241:{28,43}, :243:15, :248:{28,43}, :250:15, :257:15
     end
   end // always @(posedge)
-  `ifdef ENABLE_INITIAL_REG_	// scala/SFU.scala:122:7
-    `ifdef FIRRTL_BEFORE_INITIAL	// scala/SFU.scala:122:7
-      `FIRRTL_BEFORE_INITIAL	// scala/SFU.scala:122:7
+  `ifdef ENABLE_INITIAL_REG_	// scala/SFU.scala:180:7
+    `ifdef FIRRTL_BEFORE_INITIAL	// scala/SFU.scala:180:7
+      `FIRRTL_BEFORE_INITIAL	// scala/SFU.scala:180:7
     `endif // FIRRTL_BEFORE_INITIAL
-    logic [31:0] _RANDOM[0:2];	// scala/SFU.scala:122:7
-    initial begin	// scala/SFU.scala:122:7
-      `ifdef INIT_RANDOM_PROLOG_	// scala/SFU.scala:122:7
-        `INIT_RANDOM_PROLOG_	// scala/SFU.scala:122:7
+    logic [31:0] _RANDOM[0:2];	// scala/SFU.scala:180:7
+    initial begin	// scala/SFU.scala:180:7
+      `ifdef INIT_RANDOM_PROLOG_	// scala/SFU.scala:180:7
+        `INIT_RANDOM_PROLOG_	// scala/SFU.scala:180:7
       `endif // INIT_RANDOM_PROLOG_
-      `ifdef RANDOMIZE_REG_INIT	// scala/SFU.scala:122:7
+      `ifdef RANDOMIZE_REG_INIT	// scala/SFU.scala:180:7
         for (logic [1:0] i = 2'h0; i < 2'h3; i += 2'h1) begin
-          _RANDOM[i] = `RANDOM;	// scala/SFU.scala:122:7
-        end	// scala/SFU.scala:122:7
-        s1Pipe_rValid = _RANDOM[2'h0][0];	// scala/SFU.scala:100:29, :122:7
-        s1Pipe_rBits_sign = _RANDOM[2'h0][1];	// scala/SFU.scala:100:29, :101:25, :122:7
-        s1Pipe_rBits_exponent = _RANDOM[2'h0][9:2];	// scala/SFU.scala:100:29, :101:25, :122:7
-        s1Pipe_rBits_mantissa = {_RANDOM[2'h0][31:10], _RANDOM[2'h1][0]};	// scala/SFU.scala:100:29, :101:25, :122:7
-        s1Pipe_rBits_bypass = _RANDOM[2'h1][1];	// scala/SFU.scala:101:25, :122:7
-        s1Pipe_rBits_bypassVal = {_RANDOM[2'h1][31:2], _RANDOM[2'h2][1:0]};	// scala/SFU.scala:101:25, :122:7
-        s1Pipe_rBits_throughout_op = _RANDOM[2'h2][4:2];	// scala/SFU.scala:101:25, :122:7
+          _RANDOM[i] = `RANDOM;	// scala/SFU.scala:180:7
+        end	// scala/SFU.scala:180:7
+        s1Pipe_rValid = _RANDOM[2'h0][0];	// scala/SFU.scala:109:29, :180:7
+        s1Pipe_rBits_sign = _RANDOM[2'h0][1];	// scala/SFU.scala:109:29, :110:25, :180:7
+        s1Pipe_rBits_exponent = _RANDOM[2'h0][9:2];	// scala/SFU.scala:109:29, :110:25, :180:7
+        s1Pipe_rBits_mantissa = {_RANDOM[2'h0][31:10], _RANDOM[2'h1][0]};	// scala/SFU.scala:109:29, :110:25, :180:7
+        s1Pipe_rBits_op = _RANDOM[2'h1][3:1];	// scala/SFU.scala:110:25, :180:7
+        s1Pipe_rBits_bypass = _RANDOM[2'h1][4];	// scala/SFU.scala:110:25, :180:7
+        s1Pipe_rBits_bypassVal = {_RANDOM[2'h1][31:5], _RANDOM[2'h2][4:0]};	// scala/SFU.scala:110:25, :180:7
       `endif // RANDOMIZE_REG_INIT
     end // initial
-    `ifdef FIRRTL_AFTER_INITIAL	// scala/SFU.scala:122:7
-      `FIRRTL_AFTER_INITIAL	// scala/SFU.scala:122:7
+    `ifdef FIRRTL_AFTER_INITIAL	// scala/SFU.scala:180:7
+      `FIRRTL_AFTER_INITIAL	// scala/SFU.scala:180:7
     `endif // FIRRTL_AFTER_INITIAL
   `endif // ENABLE_INITIAL_REG_
-  assign io_in_ready = s1_ready;	// scala/SFU.scala:102:43, :122:7
-  assign io_out_valid = s1Pipe_rValid;	// scala/SFU.scala:100:29, :122:7
-  assign io_out_bits_sign = s1Pipe_rBits_sign;	// scala/SFU.scala:101:25, :122:7
-  assign io_out_bits_exponent = s1Pipe_rBits_exponent;	// scala/SFU.scala:101:25, :122:7
-  assign io_out_bits_mantissa = s1Pipe_rBits_mantissa;	// scala/SFU.scala:101:25, :122:7
-  assign io_out_bits_bypass = s1Pipe_rBits_bypass;	// scala/SFU.scala:101:25, :122:7
-  assign io_out_bits_bypassVal = s1Pipe_rBits_bypassVal;	// scala/SFU.scala:101:25, :122:7
-  assign io_out_bits_throughout_op = s1Pipe_rBits_throughout_op;	// scala/SFU.scala:101:25, :122:7
+  assign io_in_ready = s1_ready;	// scala/SFU.scala:111:43, :180:7
+  assign io_out_valid = s1Pipe_rValid;	// scala/SFU.scala:109:29, :180:7
+  assign io_out_bits_sign = s1Pipe_rBits_sign;	// scala/SFU.scala:110:25, :180:7
+  assign io_out_bits_exponent = s1Pipe_rBits_exponent;	// scala/SFU.scala:110:25, :180:7
+  assign io_out_bits_mantissa = s1Pipe_rBits_mantissa;	// scala/SFU.scala:110:25, :180:7
+  assign io_out_bits_op = s1Pipe_rBits_op;	// scala/SFU.scala:110:25, :180:7
+  assign io_out_bits_bypass = s1Pipe_rBits_bypass;	// scala/SFU.scala:110:25, :180:7
+  assign io_out_bits_bypassVal = s1Pipe_rBits_bypassVal;	// scala/SFU.scala:110:25, :180:7
 endmodule
 
-module RangeReduce(	// scala/SFU.scala:216:7
-  input         clock,	// scala/SFU.scala:216:7
-                reset,	// scala/SFU.scala:216:7
-  output        io_in_ready,	// scala/SFU.scala:231:14
-  input         io_in_valid,	// scala/SFU.scala:231:14
-                io_in_bits_sign,	// scala/SFU.scala:231:14
-  input  [7:0]  io_in_bits_exponent,	// scala/SFU.scala:231:14
-  input  [22:0] io_in_bits_mantissa,	// scala/SFU.scala:231:14
-  input  [2:0]  io_in_bits_op,	// scala/SFU.scala:231:14
-                io_in_bits_throughout_op,	// scala/SFU.scala:231:14
-  input         io_in_bits_throughout_bypass,	// scala/SFU.scala:231:14
-  input  [31:0] io_in_bits_throughout_bypassVal,	// scala/SFU.scala:231:14
-  input         io_out_ready,	// scala/SFU.scala:231:14
-  output        io_out_valid,	// scala/SFU.scala:231:14
-  output [6:0]  io_out_bits_index,	// scala/SFU.scala:231:14
-  output [16:0] io_out_bits_xl,	// scala/SFU.scala:231:14
-  output [7:0]  io_out_bits_exp,	// scala/SFU.scala:231:14
-  output [2:0]  io_out_bits_throughout_op,	// scala/SFU.scala:231:14
-  output        io_out_bits_throughout_bypass,	// scala/SFU.scala:231:14
-  output [31:0] io_out_bits_throughout_bypassVal	// scala/SFU.scala:231:14
+module RangeReduce(	// scala/SFU.scala:275:7
+  input         clock,	// scala/SFU.scala:275:7
+                reset,	// scala/SFU.scala:275:7
+  output        io_in_ready,	// scala/SFU.scala:276:14
+  input         io_in_valid,	// scala/SFU.scala:276:14
+                io_in_bits_sign,	// scala/SFU.scala:276:14
+  input  [7:0]  io_in_bits_exponent,	// scala/SFU.scala:276:14
+  input  [22:0] io_in_bits_mantissa,	// scala/SFU.scala:276:14
+  input  [2:0]  io_in_bits_op,	// scala/SFU.scala:276:14
+  input         io_in_bits_bypass,	// scala/SFU.scala:276:14
+  input  [31:0] io_in_bits_bypassVal,	// scala/SFU.scala:276:14
+  input         io_out_ready,	// scala/SFU.scala:276:14
+  output        io_out_valid,	// scala/SFU.scala:276:14
+  output [6:0]  io_out_bits_index,	// scala/SFU.scala:276:14
+  output [16:0] io_out_bits_xl,	// scala/SFU.scala:276:14
+  output        io_out_bits_sign,	// scala/SFU.scala:276:14
+  output [7:0]  io_out_bits_exp,	// scala/SFU.scala:276:14
+  output [2:0]  io_out_bits_op,	// scala/SFU.scala:276:14
+  output        io_out_bits_bypass,	// scala/SFU.scala:276:14
+  output [31:0] io_out_bits_bypassVal	// scala/SFU.scala:276:14
 );
 
-  reg              s1Pipe_rValid;	// scala/SFU.scala:100:29
-  reg  [6:0]       s1Pipe_rBits_index;	// scala/SFU.scala:101:25
-  reg  [16:0]      s1Pipe_rBits_xl;	// scala/SFU.scala:101:25
-  reg  [7:0]       s1Pipe_rBits_exp;	// scala/SFU.scala:101:25
-  reg  [2:0]       s1Pipe_rBits_throughout_op;	// scala/SFU.scala:101:25
-  reg              s1Pipe_rBits_throughout_bypass;	// scala/SFU.scala:101:25
-  reg  [31:0]      s1Pipe_rBits_throughout_bypassVal;	// scala/SFU.scala:101:25
-  wire             s1_ready = ~s1Pipe_rValid | io_out_ready;	// scala/SFU.scala:100:29, :102:{35,43}
-  wire [8:0]       _expSigned_T_1 = {1'h0, io_in_bits_exponent} - 9'h7F;	// scala/SFU.scala:243:36, :246:33
-  wire [541:0]     _sigShifted_T_2 = {519'h1, io_in_bits_mantissa} << _expSigned_T_1;	// scala/SFU.scala:243:36, :246:53
+  reg              s1Pipe_rValid;	// scala/SFU.scala:109:29
+  reg  [6:0]       s1Pipe_rBits_index;	// scala/SFU.scala:110:25
+  reg  [16:0]      s1Pipe_rBits_xl;	// scala/SFU.scala:110:25
+  reg              s1Pipe_rBits_sign;	// scala/SFU.scala:110:25
+  reg  [7:0]       s1Pipe_rBits_exp;	// scala/SFU.scala:110:25
+  reg  [2:0]       s1Pipe_rBits_op;	// scala/SFU.scala:110:25
+  reg              s1Pipe_rBits_bypass;	// scala/SFU.scala:110:25
+  reg  [31:0]      s1Pipe_rBits_bypassVal;	// scala/SFU.scala:110:25
+  wire             s1_ready = ~s1Pipe_rValid | io_out_ready;	// scala/SFU.scala:109:29, :111:{35,43}
+  wire [8:0]       _expSigned_T_1 = {1'h0, io_in_bits_exponent} - 9'h7F;	// scala/SFU.scala:288:36, :291:33
+  wire [541:0]     _sigShifted_T_2 = {519'h1, io_in_bits_mantissa} << _expSigned_T_1;	// scala/SFU.scala:288:36, :291:53
   wire [30:0]      sigShifted =
     $signed(_expSigned_T_1) > -9'sh1
       ? _sigShifted_T_2[30:0]
-      : {8'h1, io_in_bits_mantissa} >> 9'h0 - _expSigned_T_1;	// scala/SFU.scala:240:21, :243:36, :244:26, :246:{26,33,53,82,86}, :254:30
+      : {8'h1, io_in_bits_mantissa} >> 9'h0 - _expSigned_T_1;	// scala/SFU.scala:285:21, :288:36, :289:26, :291:{26,33,53,82,86}, :312:37
   wire [7:0]       intPartFloor =
     io_in_bits_sign & (|(sigShifted[22:0]))
       ? sigShifted[30:23] + 8'h1
-      : sigShifted[30:23];	// scala/SFU.scala:240:21, :244:26, :246:26, :247:33, :248:33, :249:32, :250:{26,32,58}
+      : sigShifted[30:23];	// scala/SFU.scala:285:21, :289:26, :291:26, :292:33, :293:33, :295:32, :296:{26,32,58}
   wire [22:0]      fracPartFloor =
-    io_in_bits_sign & (|(sigShifted[22:0])) ? 23'h0 - sigShifted[22:0] : sigShifted[22:0];	// scala/SFU.scala:246:26, :248:33, :249:32, :251:{26,32,62}
-  wire [31:0]      _GEN = {15'h0, io_in_bits_mantissa[16:0]};	// scala/SFU.scala:269:37, :271:28
+    io_in_bits_sign & (|(sigShifted[22:0]))
+      ? ~(sigShifted[22:0]) + 23'h1
+      : sigShifted[22:0];	// scala/SFU.scala:291:26, :293:33, :294:24, :295:32, :297:{26,32,62}
+  wire [22:0]      fracSin = {23{sigShifted[23]}} ^ sigShifted[22:0];	// scala/SFU.scala:291:26, :292:33, :293:33, :300:25, :302:40, :304:21
+  wire [22:0]      fracCos = {23{~(sigShifted[23])}} ^ sigShifted[22:0];	// scala/SFU.scala:291:26, :292:33, :293:33, :300:25, :302:40, :305:21
+  wire             _xl_T_18 = io_in_bits_op == 3'h5;	// scala/SFU.scala:307:46
+  wire             _xl_T_20 = io_in_bits_op == 3'h6;	// scala/SFU.scala:307:46
+  wire [31:0]      _GEN = {15'h0, io_in_bits_mantissa[16:0]};	// scala/SFU.scala:332:37, :334:28
   wire [7:0][6:0]  _GEN_0 =
     {{7'h0},
-     {7'h0},
-     {7'h0},
+     {{1'h0, fracCos[22:17]}},
+     {{1'h0, fracSin[22:17]}},
      {{_expSigned_T_1[0], io_in_bits_mantissa[22:17]}},
      {{_expSigned_T_1[0], io_in_bits_mantissa[22:17]}},
      {io_in_bits_mantissa[22:16]},
      {{1'h0, io_in_bits_mantissa[22:17]}},
-     {{1'h0, fracPartFloor[22:17]}}};	// scala/SFU.scala:243:36, :244:26, :246:33, :251:26, :253:37, :261:39, :262:{23,47}, :263:{23,42}, :264:28, :265:{23,33}, :266:23
+     {{1'h0, fracPartFloor[22:17]}}};	// scala/SFU.scala:288:36, :289:26, :291:33, :297:26, :304:21, :305:21, :307:46, :312:37, :322:39, :323:{23,47}, :324:{23,42}, :325:28, :326:{23,33}, :327:23, :328:{23,41}, :329:{23,41}
   wire [7:0][31:0] _GEN_1 =
     {{32'h0},
-     {32'h0},
-     {32'h0},
+     {{15'h0, fracCos[16:0]}},
+     {{15'h0, fracSin[16:0]}},
      {_GEN},
      {_GEN},
      {{16'h0, io_in_bits_mantissa[15:0]}},
      {_GEN},
-     {{15'h0, fracPartFloor[16:0]}}};	// scala/SFU.scala:251:26, :253:37, :269:37, :270:33, :272:42
-  wire             _s1Pipe_T = s1_ready & io_in_valid;	// scala/SFU.scala:102:43, src/main/scala/chisel3/util/Decoupled.scala:51:35
-  always @(posedge clock) begin	// scala/SFU.scala:216:7
-    if (reset)	// scala/SFU.scala:216:7
-      s1Pipe_rValid <= 1'h0;	// scala/SFU.scala:100:29, :246:33
-    else	// scala/SFU.scala:216:7
-      s1Pipe_rValid <= _s1Pipe_T | ~(io_out_ready & s1Pipe_rValid) & s1Pipe_rValid;	// scala/SFU.scala:100:29, :105:36, :107:18, :108:31, :109:18, src/main/scala/chisel3/util/Decoupled.scala:51:35
+     {{15'h0, fracPartFloor[16:0]}}};	// scala/SFU.scala:297:26, :304:21, :305:21, :307:46, :312:37, :332:37, :333:33, :335:42, :338:27, :339:27
+  wire             _s1Pipe_T = s1_ready & io_in_valid;	// scala/SFU.scala:111:43, src/main/scala/chisel3/util/Decoupled.scala:51:35
+  always @(posedge clock) begin	// scala/SFU.scala:275:7
+    if (reset)	// scala/SFU.scala:275:7
+      s1Pipe_rValid <= 1'h0;	// scala/SFU.scala:109:29, :291:33
+    else	// scala/SFU.scala:275:7
+      s1Pipe_rValid <= _s1Pipe_T | ~(io_out_ready & s1Pipe_rValid) & s1Pipe_rValid;	// scala/SFU.scala:109:29, :114:36, :116:18, :117:31, :118:18, src/main/scala/chisel3/util/Decoupled.scala:51:35
     if (_s1Pipe_T) begin	// src/main/scala/chisel3/util/Decoupled.scala:51:35
-      s1Pipe_rBits_index <= _GEN_0[io_in_bits_op];	// scala/SFU.scala:101:25, :253:37, :261:39
-      s1Pipe_rBits_xl <= _GEN_1[io_in_bits_op][16:0];	// scala/SFU.scala:101:25, :253:37, :269:37, :283:22
+      s1Pipe_rBits_index <= _GEN_0[io_in_bits_op];	// scala/SFU.scala:110:25, :307:46, :312:37, :322:39
+      s1Pipe_rBits_xl <= _GEN_1[io_in_bits_op][16:0];	// scala/SFU.scala:110:25, :307:46, :312:37, :332:37, :347:22
+      s1Pipe_rBits_sign <=
+        _xl_T_20
+          ? sigShifted[24] ^ sigShifted[23]
+          : _xl_T_18 & sigShifted[24] ^ io_in_bits_sign;	// scala/SFU.scala:110:25, :291:26, :292:33, :300:25, :301:40, :302:{30,40}, :307:46
       s1Pipe_rBits_exp <=
-        io_in_bits_op == 3'h4 | io_in_bits_op == 3'h3 | io_in_bits_op == 3'h2
-        | io_in_bits_op == 3'h1
-          ? _expSigned_T_1[7:0]
-          : io_in_bits_op == 3'h0
-              ? (io_in_bits_sign ? 8'h0 - intPartFloor : intPartFloor)
-              : 8'h0;	// scala/SFU.scala:101:25, :243:36, :246:33, :250:26, :253:37, :254:{23,30}
-      s1Pipe_rBits_throughout_op <= io_in_bits_throughout_op;	// scala/SFU.scala:101:25
-      s1Pipe_rBits_throughout_bypass <= io_in_bits_throughout_bypass;	// scala/SFU.scala:101:25
-      s1Pipe_rBits_throughout_bypassVal <= io_in_bits_throughout_bypassVal;	// scala/SFU.scala:101:25
+        _xl_T_20 | _xl_T_18
+          ? 8'h0
+          : io_in_bits_op == 3'h4 | io_in_bits_op == 3'h3
+              ? _expSigned_T_1[8:1]
+              : io_in_bits_op == 3'h2 | io_in_bits_op == 3'h1
+                  ? _expSigned_T_1[7:0]
+                  : io_in_bits_op == 3'h0
+                      ? (io_in_bits_sign ? 8'h0 - intPartFloor : intPartFloor)
+                      : 8'h0;	// scala/SFU.scala:110:25, :288:36, :291:33, :296:26, :307:46, :312:37, :313:{23,30}, :316:31
+      s1Pipe_rBits_op <= io_in_bits_op;	// scala/SFU.scala:110:25
+      s1Pipe_rBits_bypass <= io_in_bits_bypass;	// scala/SFU.scala:110:25
+      s1Pipe_rBits_bypassVal <= io_in_bits_bypassVal;	// scala/SFU.scala:110:25
     end
   end // always @(posedge)
-  `ifdef ENABLE_INITIAL_REG_	// scala/SFU.scala:216:7
-    `ifdef FIRRTL_BEFORE_INITIAL	// scala/SFU.scala:216:7
-      `FIRRTL_BEFORE_INITIAL	// scala/SFU.scala:216:7
+  `ifdef ENABLE_INITIAL_REG_	// scala/SFU.scala:275:7
+    `ifdef FIRRTL_BEFORE_INITIAL	// scala/SFU.scala:275:7
+      `FIRRTL_BEFORE_INITIAL	// scala/SFU.scala:275:7
     `endif // FIRRTL_BEFORE_INITIAL
-    logic [31:0] _RANDOM[0:2];	// scala/SFU.scala:216:7
-    initial begin	// scala/SFU.scala:216:7
-      `ifdef INIT_RANDOM_PROLOG_	// scala/SFU.scala:216:7
-        `INIT_RANDOM_PROLOG_	// scala/SFU.scala:216:7
+    logic [31:0] _RANDOM[0:2];	// scala/SFU.scala:275:7
+    initial begin	// scala/SFU.scala:275:7
+      `ifdef INIT_RANDOM_PROLOG_	// scala/SFU.scala:275:7
+        `INIT_RANDOM_PROLOG_	// scala/SFU.scala:275:7
       `endif // INIT_RANDOM_PROLOG_
-      `ifdef RANDOMIZE_REG_INIT	// scala/SFU.scala:216:7
+      `ifdef RANDOMIZE_REG_INIT	// scala/SFU.scala:275:7
         for (logic [1:0] i = 2'h0; i < 2'h3; i += 2'h1) begin
-          _RANDOM[i] = `RANDOM;	// scala/SFU.scala:216:7
-        end	// scala/SFU.scala:216:7
-        s1Pipe_rValid = _RANDOM[2'h0][0];	// scala/SFU.scala:100:29, :216:7
-        s1Pipe_rBits_index = _RANDOM[2'h0][7:1];	// scala/SFU.scala:100:29, :101:25, :216:7
-        s1Pipe_rBits_xl = _RANDOM[2'h0][24:8];	// scala/SFU.scala:100:29, :101:25, :216:7
-        s1Pipe_rBits_exp = {_RANDOM[2'h0][31:25], _RANDOM[2'h1][0]};	// scala/SFU.scala:100:29, :101:25, :216:7
-        s1Pipe_rBits_throughout_op = _RANDOM[2'h1][3:1];	// scala/SFU.scala:101:25, :216:7
-        s1Pipe_rBits_throughout_bypass = _RANDOM[2'h1][4];	// scala/SFU.scala:101:25, :216:7
-        s1Pipe_rBits_throughout_bypassVal = {_RANDOM[2'h1][31:5], _RANDOM[2'h2][4:0]};	// scala/SFU.scala:101:25, :216:7
+          _RANDOM[i] = `RANDOM;	// scala/SFU.scala:275:7
+        end	// scala/SFU.scala:275:7
+        s1Pipe_rValid = _RANDOM[2'h0][0];	// scala/SFU.scala:109:29, :275:7
+        s1Pipe_rBits_index = _RANDOM[2'h0][7:1];	// scala/SFU.scala:109:29, :110:25, :275:7
+        s1Pipe_rBits_xl = _RANDOM[2'h0][24:8];	// scala/SFU.scala:109:29, :110:25, :275:7
+        s1Pipe_rBits_sign = _RANDOM[2'h0][25];	// scala/SFU.scala:109:29, :110:25, :275:7
+        s1Pipe_rBits_exp = {_RANDOM[2'h0][31:26], _RANDOM[2'h1][1:0]};	// scala/SFU.scala:109:29, :110:25, :275:7
+        s1Pipe_rBits_op = _RANDOM[2'h1][4:2];	// scala/SFU.scala:110:25, :275:7
+        s1Pipe_rBits_bypass = _RANDOM[2'h1][5];	// scala/SFU.scala:110:25, :275:7
+        s1Pipe_rBits_bypassVal = {_RANDOM[2'h1][31:6], _RANDOM[2'h2][5:0]};	// scala/SFU.scala:110:25, :275:7
       `endif // RANDOMIZE_REG_INIT
     end // initial
-    `ifdef FIRRTL_AFTER_INITIAL	// scala/SFU.scala:216:7
-      `FIRRTL_AFTER_INITIAL	// scala/SFU.scala:216:7
+    `ifdef FIRRTL_AFTER_INITIAL	// scala/SFU.scala:275:7
+      `FIRRTL_AFTER_INITIAL	// scala/SFU.scala:275:7
     `endif // FIRRTL_AFTER_INITIAL
   `endif // ENABLE_INITIAL_REG_
-  assign io_in_ready = s1_ready;	// scala/SFU.scala:102:43, :216:7
-  assign io_out_valid = s1Pipe_rValid;	// scala/SFU.scala:100:29, :216:7
-  assign io_out_bits_index = s1Pipe_rBits_index;	// scala/SFU.scala:101:25, :216:7
-  assign io_out_bits_xl = s1Pipe_rBits_xl;	// scala/SFU.scala:101:25, :216:7
-  assign io_out_bits_exp = s1Pipe_rBits_exp;	// scala/SFU.scala:101:25, :216:7
-  assign io_out_bits_throughout_op = s1Pipe_rBits_throughout_op;	// scala/SFU.scala:101:25, :216:7
-  assign io_out_bits_throughout_bypass = s1Pipe_rBits_throughout_bypass;	// scala/SFU.scala:101:25, :216:7
-  assign io_out_bits_throughout_bypassVal = s1Pipe_rBits_throughout_bypassVal;	// scala/SFU.scala:101:25, :216:7
+  assign io_in_ready = s1_ready;	// scala/SFU.scala:111:43, :275:7
+  assign io_out_valid = s1Pipe_rValid;	// scala/SFU.scala:109:29, :275:7
+  assign io_out_bits_index = s1Pipe_rBits_index;	// scala/SFU.scala:110:25, :275:7
+  assign io_out_bits_xl = s1Pipe_rBits_xl;	// scala/SFU.scala:110:25, :275:7
+  assign io_out_bits_sign = s1Pipe_rBits_sign;	// scala/SFU.scala:110:25, :275:7
+  assign io_out_bits_exp = s1Pipe_rBits_exp;	// scala/SFU.scala:110:25, :275:7
+  assign io_out_bits_op = s1Pipe_rBits_op;	// scala/SFU.scala:110:25, :275:7
+  assign io_out_bits_bypass = s1Pipe_rBits_bypass;	// scala/SFU.scala:110:25, :275:7
+  assign io_out_bits_bypassVal = s1Pipe_rBits_bypassVal;	// scala/SFU.scala:110:25, :275:7
 endmodule
 
-module LookupTable(	// scala/SFU.scala:289:7
-  input         clock,	// scala/SFU.scala:289:7
-                reset,	// scala/SFU.scala:289:7
-  output        io_in_ready,	// scala/SFU.scala:303:14
-  input         io_in_valid,	// scala/SFU.scala:303:14
-  input  [2:0]  io_in_bits_op,	// scala/SFU.scala:303:14
-  input  [6:0]  io_in_bits_index,	// scala/SFU.scala:303:14
-  input  [2:0]  io_in_bits_throughout_op,	// scala/SFU.scala:303:14
-  input  [16:0] io_in_bits_throughout_xl,	// scala/SFU.scala:303:14
-  input  [7:0]  io_in_bits_throughout_exp,	// scala/SFU.scala:303:14
-  input         io_in_bits_throughout_bypass,	// scala/SFU.scala:303:14
-  input  [31:0] io_in_bits_throughout_bypassVal,	// scala/SFU.scala:303:14
-  input         io_out_ready,	// scala/SFU.scala:303:14
-  output        io_out_valid,	// scala/SFU.scala:303:14
-  output [26:0] io_out_bits_c0,	// scala/SFU.scala:303:14
-  output [16:0] io_out_bits_c1,	// scala/SFU.scala:303:14
-  output [12:0] io_out_bits_c2,	// scala/SFU.scala:303:14
-  output [2:0]  io_out_bits_throughout_op,	// scala/SFU.scala:303:14
-  output [16:0] io_out_bits_throughout_xl,	// scala/SFU.scala:303:14
-  output [7:0]  io_out_bits_throughout_exp,	// scala/SFU.scala:303:14
-  output        io_out_bits_throughout_bypass,	// scala/SFU.scala:303:14
-  output [31:0] io_out_bits_throughout_bypassVal	// scala/SFU.scala:303:14
+module LookupTable(	// scala/SFU.scala:357:7
+  input         clock,	// scala/SFU.scala:357:7
+                reset,	// scala/SFU.scala:357:7
+  output        io_in_ready,	// scala/SFU.scala:358:14
+  input         io_in_valid,	// scala/SFU.scala:358:14
+  input  [6:0]  io_in_bits_index,	// scala/SFU.scala:358:14
+  input  [16:0] io_in_bits_xl,	// scala/SFU.scala:358:14
+  input         io_in_bits_sign,	// scala/SFU.scala:358:14
+  input  [7:0]  io_in_bits_exp,	// scala/SFU.scala:358:14
+  input  [2:0]  io_in_bits_op,	// scala/SFU.scala:358:14
+  input         io_in_bits_bypass,	// scala/SFU.scala:358:14
+  input  [31:0] io_in_bits_bypassVal,	// scala/SFU.scala:358:14
+  input         io_out_ready,	// scala/SFU.scala:358:14
+  output        io_out_valid,	// scala/SFU.scala:358:14
+  output [26:0] io_out_bits_c0,	// scala/SFU.scala:358:14
+  output [16:0] io_out_bits_c1,	// scala/SFU.scala:358:14
+  output [12:0] io_out_bits_c2,	// scala/SFU.scala:358:14
+  output [16:0] io_out_bits_xl,	// scala/SFU.scala:358:14
+  output        io_out_bits_sign,	// scala/SFU.scala:358:14
+  output [7:0]  io_out_bits_exp,	// scala/SFU.scala:358:14
+  output [2:0]  io_out_bits_op,	// scala/SFU.scala:358:14
+  output        io_out_bits_bypass,	// scala/SFU.scala:358:14
+  output [31:0] io_out_bits_bypassVal	// scala/SFU.scala:358:14
 );
 
-  reg                s1Pipe_rValid;	// scala/SFU.scala:100:29
-  reg  [26:0]        s1Pipe_rBits_c0;	// scala/SFU.scala:101:25
-  reg  [16:0]        s1Pipe_rBits_c1;	// scala/SFU.scala:101:25
-  reg  [12:0]        s1Pipe_rBits_c2;	// scala/SFU.scala:101:25
-  reg  [2:0]         s1Pipe_rBits_throughout_op;	// scala/SFU.scala:101:25
-  reg  [16:0]        s1Pipe_rBits_throughout_xl;	// scala/SFU.scala:101:25
-  reg  [7:0]         s1Pipe_rBits_throughout_exp;	// scala/SFU.scala:101:25
-  reg                s1Pipe_rBits_throughout_bypass;	// scala/SFU.scala:101:25
-  reg  [31:0]        s1Pipe_rBits_throughout_bypassVal;	// scala/SFU.scala:101:25
-  wire               s1_ready = ~s1Pipe_rValid | io_out_ready;	// scala/SFU.scala:100:29, :102:{35,43}
+  reg                s1Pipe_rValid;	// scala/SFU.scala:109:29
+  reg  [26:0]        s1Pipe_rBits_c0;	// scala/SFU.scala:110:25
+  reg  [16:0]        s1Pipe_rBits_c1;	// scala/SFU.scala:110:25
+  reg  [12:0]        s1Pipe_rBits_c2;	// scala/SFU.scala:110:25
+  reg  [16:0]        s1Pipe_rBits_xl;	// scala/SFU.scala:110:25
+  reg                s1Pipe_rBits_sign;	// scala/SFU.scala:110:25
+  reg  [7:0]         s1Pipe_rBits_exp;	// scala/SFU.scala:110:25
+  reg  [2:0]         s1Pipe_rBits_op;	// scala/SFU.scala:110:25
+  reg                s1Pipe_rBits_bypass;	// scala/SFU.scala:110:25
+  reg  [31:0]        s1Pipe_rBits_bypassVal;	// scala/SFU.scala:110:25
+  wire               s1_ready = ~s1Pipe_rValid | io_out_ready;	// scala/SFU.scala:109:29, :111:{35,43}
   wire [63:0][12:0]  _GEN =
+    '{13'h1623,
+      13'h1622,
+      13'h1625,
+      13'h162C,
+      13'h1631,
+      13'h1638,
+      13'h1642,
+      13'h164D,
+      13'h1659,
+      13'h1667,
+      13'h1675,
+      13'h1687,
+      13'h1696,
+      13'h16AC,
+      13'h16C2,
+      13'h16D4,
+      13'h16EC,
+      13'h1708,
+      13'h1720,
+      13'h173D,
+      13'h175A,
+      13'h177A,
+      13'h1798,
+      13'h17B9,
+      13'h17DB,
+      13'h1802,
+      13'h1825,
+      13'h184C,
+      13'h1872,
+      13'h189D,
+      13'h18C5,
+      13'h18F0,
+      13'h191D,
+      13'h1949,
+      13'h1977,
+      13'h19A3,
+      13'h19D5,
+      13'h1A06,
+      13'h1A38,
+      13'h1A69,
+      13'h1A9D,
+      13'h1AD4,
+      13'h1B06,
+      13'h1B3C,
+      13'h1B76,
+      13'h1BAA,
+      13'h1BE3,
+      13'h1C1E,
+      13'h1C54,
+      13'h1C8F,
+      13'h1CC9,
+      13'h1D06,
+      13'h1D41,
+      13'h1D7D,
+      13'h1DB8,
+      13'h1DF3,
+      13'h1E31,
+      13'h1E6D,
+      13'h1EAB,
+      13'h1EE9,
+      13'h1F28,
+      13'h1F64,
+      13'h1FA4,
+      13'h1FE0};	// scala/SFU.scala:407:43
+  wire [63:0][16:0]  _GEN_0 =
+    '{17'h4EF,
+      17'h9DE,
+      17'hECB,
+      17'h13B5,
+      17'h189D,
+      17'h1D81,
+      17'h2260,
+      17'h273A,
+      17'h2C0E,
+      17'h30DB,
+      17'h35A1,
+      17'h3A5E,
+      17'h3F13,
+      17'h43BD,
+      17'h485D,
+      17'h4CF3,
+      17'h517C,
+      17'h55F8,
+      17'h5A68,
+      17'h5EC9,
+      17'h631C,
+      17'h675F,
+      17'h6B93,
+      17'h6FB6,
+      17'h73C8,
+      17'h77C7,
+      17'h7BB5,
+      17'h7F8F,
+      17'h8356,
+      17'h8708,
+      17'h8AA6,
+      17'h8E2E,
+      17'h91A0,
+      17'h94FC,
+      17'h9841,
+      17'h9B6F,
+      17'h9E84,
+      17'hA181,
+      17'hA465,
+      17'hA730,
+      17'hA9E1,
+      17'hAC77,
+      17'hAEF4,
+      17'hB155,
+      17'hB39A,
+      17'hB5C5,
+      17'hB7D3,
+      17'hB9C4,
+      17'hBB9A,
+      17'hBD52,
+      17'hBEED,
+      17'hC06A,
+      17'hC1CA,
+      17'hC30C,
+      17'hC430,
+      17'hC536,
+      17'hC61D,
+      17'hC6E6,
+      17'hC790,
+      17'hC81B,
+      17'hC887,
+      17'hC8D5,
+      17'hC903,
+      17'hC913};	// scala/SFU.scala:407:43
+  wire [63:0][26:0]  _GEN_1 =
+    '{27'h3FFB10B,
+      27'h3FEC43B,
+      27'h3FD39B4,
+      27'h3FB11B6,
+      27'h3F84C8E,
+      27'h3F4EAAF,
+      27'h3F0ECA0,
+      27'h3EC52F9,
+      27'h3E71E74,
+      27'h3E14FE0,
+      27'h3DAE81A,
+      27'h3D3E828,
+      27'h3CC511B,
+      27'h3C42420,
+      27'h3BB6275,
+      27'h3B20D76,
+      27'h3A82698,
+      27'h39DAF5D,
+      27'h392A961,
+      27'h387165D,
+      27'h37AF812,
+      27'h36E5068,
+      27'h3612148,
+      27'h3536CC2,
+      27'h34534F0,
+      27'h3367C08,
+      27'h3274445,
+      27'h317900C,
+      27'h30761BE,
+      27'h2F6BBDF,
+      27'h2E5A102,
+      27'h2D413CA,
+      27'h2C216E9,
+      27'h2AFAD25,
+      27'h29CD953,
+      27'h2899E5F,
+      27'h275FF41,
+      27'h261FEFA,
+      27'h24DA0A5,
+      27'h238E762,
+      27'h223D665,
+      27'h20E70F0,
+      27'h1F8BA48,
+      27'h1E2B5CE,
+      27'h1CC66E9,
+      27'h1B5D0FB,
+      27'h19EF78E,
+      27'h187DE29,
+      27'h170884D,
+      27'h158F9A1,
+      27'h14135C4,
+      27'h129405F,
+      27'h1111D21,
+      27'hF8CFC5,
+      27'hE05C0F,
+      27'hC7C5BC,
+      27'hAF109D,
+      27'h96407D,
+      27'h7D5932,
+      27'h645E96,
+      27'h4B5480,
+      27'h323EC6,
+      27'h192152,
+      27'h6};	// scala/SFU.scala:407:43
+  wire [63:0][12:0]  _GEN_2 =
     '{13'h1D17,
       13'h1D0C,
       13'h1D01,
@@ -379,8 +592,8 @@ module LookupTable(	// scala/SFU.scala:289:7
       13'h159D,
       13'h154D,
       13'h14FA,
-      13'h14A4};	// scala/SFU.scala:351:43
-  wire [63:0][16:0]  _GEN_0 =
+      13'h14A4};	// scala/SFU.scala:407:43
+  wire [63:0][16:0]  _GEN_3 =
     '{17'h5D0F,
       17'h5DCC,
       17'h5E8C,
@@ -444,8 +657,8 @@ module LookupTable(	// scala/SFU.scala:289:7
       17'hB064,
       17'hB310,
       17'hB5D1,
-      17'hB8A8};	// scala/SFU.scala:351:43
-  wire [63:0][26:0]  _GEN_1 =
+      17'hB8A8};	// scala/SFU.scala:407:43
+  wire [63:0][26:0]  _GEN_4 =
     '{27'h3F469C3,
       27'h3E8BC12,
       27'h3DCF68F,
@@ -509,8 +722,8 @@ module LookupTable(	// scala/SFU.scala:289:7
       27'h43ACE4,
       27'h2D75AA,
       27'h16E79B,
-      27'h4};	// scala/SFU.scala:351:43
-  wire [127:0][12:0] _GEN_2 =
+      27'h4};	// scala/SFU.scala:407:43
+  wire [127:0][12:0] _GEN_5 =
     '{13'h206,
       13'h20A,
       13'h212,
@@ -638,8 +851,8 @@ module LookupTable(	// scala/SFU.scala:289:7
       13'hEC4,
       13'hF1A,
       13'hF76,
-      13'hFD2};	// scala/SFU.scala:351:43
-  wire [127:0][16:0] _GEN_3 =
+      13'hFD2};	// scala/SFU.scala:407:43
+  wire [127:0][16:0] _GEN_6 =
     '{17'h1BF7F,
       17'h1BEFD,
       17'h1BE79,
@@ -767,8 +980,8 @@ module LookupTable(	// scala/SFU.scala:289:7
       17'h10B99,
       17'h107D3,
       17'h103F6,
-      17'h10002};	// scala/SFU.scala:351:43
-  wire [127:0][26:0] _GEN_4 =
+      17'h10002};	// scala/SFU.scala:407:43
+  wire [127:0][26:0] _GEN_7 =
     '{27'h2020202,
       27'h2040810,
       27'h2061237,
@@ -896,8 +1109,8 @@ module LookupTable(	// scala/SFU.scala:289:7
       27'h3E88CB3,
       27'h3F03F03,
       27'h3F80FDF,
-      27'h3FFFFFF};	// scala/SFU.scala:351:43
-  wire [63:0][12:0]  _GEN_5 =
+      27'h3FFFFFF};	// scala/SFU.scala:407:43
+  wire [63:0][12:0]  _GEN_8 =
     '{13'hF4F,
       13'hF24,
       13'hEFD,
@@ -961,8 +1174,8 @@ module LookupTable(	// scala/SFU.scala:289:7
       13'h7FA,
       13'h7E8,
       13'h7D2,
-      13'h7B7};	// scala/SFU.scala:351:43
-  wire [63:0][16:0]  _GEN_6 =
+      13'h7B7};	// scala/SFU.scala:407:43
+  wire [63:0][16:0]  _GEN_9 =
     '{17'hAF88,
       17'hADA4,
       17'hABC5,
@@ -1026,8 +1239,8 @@ module LookupTable(	// scala/SFU.scala:289:7
       17'h5BA7,
       17'h5AAA,
       17'h59B0,
-      17'h58B9};	// scala/SFU.scala:351:43
-  wire [63:0][26:0]  _GEN_7 =
+      17'h58B9};	// scala/SFU.scala:407:43
+  wire [63:0][26:0]  _GEN_10 =
     '{27'h3F4F831,
       27'h3EA0ECC,
       27'h3DF437F,
@@ -1091,8 +1304,8 @@ module LookupTable(	// scala/SFU.scala:289:7
       27'h210E8A3,
       27'h20B361B,
       27'h2059348,
-      27'h2000000};	// scala/SFU.scala:351:43
-  wire [63:0][12:0]  _GEN_8 =
+      27'h2000000};	// scala/SFU.scala:407:43
+  wire [63:0][12:0]  _GEN_11 =
     '{13'h224,
       13'h230,
       13'h23A,
@@ -1156,8 +1369,8 @@ module LookupTable(	// scala/SFU.scala:289:7
       13'hA80,
       13'hAE8,
       13'hB52,
-      13'hBC3};	// scala/SFU.scala:356:23
-  wire [63:0][16:0]  _GEN_9 =
+      13'hBC3};	// scala/SFU.scala:412:23
+  wire [63:0][16:0]  _GEN_12 =
     '{17'h1A46C,
       17'h1A354,
       17'h1A237,
@@ -1221,8 +1434,8 @@ module LookupTable(	// scala/SFU.scala:289:7
       17'h11105,
       17'h10B91,
       17'h105E8,
-      17'h10006};	// scala/SFU.scala:356:23
-  wire [63:0][26:0]  _GEN_10 =
+      17'h10006};	// scala/SFU.scala:412:23
+  wire [63:0][26:0]  _GEN_13 =
     '{27'h2D6EC25,
       27'h2D9CD26,
       27'h2DCB6FA,
@@ -1286,8 +1499,8 @@ module LookupTable(	// scala/SFU.scala:289:7
       27'h3E8CFE3,
       27'h3F05D8F,
       27'h3F817AF,
-      27'h3FFFFFD};	// scala/SFU.scala:356:23
-  wire [63:0][12:0]  _GEN_11 =
+      27'h3FFFFFD};	// scala/SFU.scala:412:23
+  wire [63:0][12:0]  _GEN_14 =
     '{13'h186,
       13'h18A,
       13'h194,
@@ -1351,8 +1564,8 @@ module LookupTable(	// scala/SFU.scala:289:7
       13'h76C,
       13'h7B6,
       13'h802,
-      13'h852};	// scala/SFU.scala:356:23
-  wire [63:0][16:0]  _GEN_12 =
+      13'h852};	// scala/SFU.scala:412:23
+  wire [63:0][16:0]  _GEN_15 =
     '{17'h1BF3E,
       17'h1BE79,
       17'h1BDAF,
@@ -1416,8 +1629,8 @@ module LookupTable(	// scala/SFU.scala:289:7
       17'h15704,
       17'h15329,
       17'h14F28,
-      17'h14AFF};	// scala/SFU.scala:356:23
-  wire [63:0][26:0]  _GEN_13 =
+      17'h14AFF};	// scala/SFU.scala:412:23
+  wire [63:0][26:0]  _GEN_16 =
     '{27'h2020305,
       27'h2040C28,
       27'h2061B89,
@@ -1481,8 +1694,8 @@ module LookupTable(	// scala/SFU.scala:289:7
       27'h2C3AE55,
       27'h2C905A5,
       27'h2CE7C64,
-      27'h2D413CB};	// scala/SFU.scala:356:23
-  wire [63:0][12:0]  _GEN_14 =
+      27'h2D413CB};	// scala/SFU.scala:412:23
+  wire [63:0][12:0]  _GEN_17 =
     '{13'h1D2E,
       13'h1D18,
       13'h1D12,
@@ -1546,8 +1759,8 @@ module LookupTable(	// scala/SFU.scala:289:7
       13'h18A5,
       13'h1875,
       13'h184D,
-      13'h181F};	// scala/SFU.scala:355:23
-  wire [63:0][16:0]  _GEN_15 =
+      13'h181F};	// scala/SFU.scala:411:23
+  wire [63:0][16:0]  _GEN_18 =
     '{17'h5ADD,
       17'h5B3A,
       17'h5B97,
@@ -1611,8 +1824,8 @@ module LookupTable(	// scala/SFU.scala:289:7
       17'h7D19,
       17'h7E0B,
       17'h7F02,
-      17'h7FFF};	// scala/SFU.scala:355:23
-  wire [63:0][26:0]  _GEN_16 =
+      17'h7FFF};	// scala/SFU.scala:411:23
+  wire [63:0][26:0]  _GEN_19 =
     '{27'h2D13E4E,
       27'h2CE65F1,
       27'h2CB8AB0,
@@ -1676,8 +1889,8 @@ module LookupTable(	// scala/SFU.scala:289:7
       27'h20BDCD3,
       27'h207F03F,
       27'h203FC09,
-      27'h2000001};	// scala/SFU.scala:355:23
-  wire [63:0][12:0]  _GEN_17 =
+      27'h2000001};	// scala/SFU.scala:411:23
+  wire [63:0][12:0]  _GEN_20 =
     '{13'h1BF4,
       13'h1BEC,
       13'h1BDD,
@@ -1741,8 +1954,8 @@ module LookupTable(	// scala/SFU.scala:289:7
       13'h158C,
       13'h154C,
       13'h1518,
-      13'h14D4};	// scala/SFU.scala:355:23
-  wire [63:0][16:0]  _GEN_18 =
+      13'h14D4};	// scala/SFU.scala:411:23
+  wire [63:0][16:0]  _GEN_21 =
     '{17'h8081,
       17'h8103,
       17'h8187,
@@ -1806,8 +2019,8 @@ module LookupTable(	// scala/SFU.scala:289:7
       17'hB0EB,
       17'hB241,
       17'hB39E,
-      17'hB504};	// scala/SFU.scala:355:23
-  wire [63:0][26:0]  _GEN_19 =
+      17'hB504};	// scala/SFU.scala:411:23
+  wire [63:0][26:0]  _GEN_22 =
     '{27'h3FBFDFE,
       27'h3F7F7F0,
       27'h3F3EDC9,
@@ -1871,300 +2084,327 @@ module LookupTable(	// scala/SFU.scala:289:7
       27'h2E4DA83,
       27'h2DF4DD4,
       27'h2D9B658,
-      27'h2D413CD};	// scala/SFU.scala:355:23
-  wire [7:0][26:0]   _GEN_20 =
-    {{_GEN_4[io_in_bits_index]},
-     {_GEN_4[io_in_bits_index]},
-     {_GEN_4[io_in_bits_index]},
+      27'h2D413CD};	// scala/SFU.scala:411:23
+  wire [26:0]        _GEN_23 = _GEN_1[io_in_bits_index[5:0]];	// scala/SFU.scala:407:43, :408:33
+  wire [16:0]        _GEN_24 = _GEN_0[io_in_bits_index[5:0]];	// scala/SFU.scala:407:43, :408:33
+  wire [12:0]        _GEN_25 = _GEN[io_in_bits_index[5:0]];	// scala/SFU.scala:407:43, :408:33
+  wire [7:0][26:0]   _GEN_26 =
+    {{_GEN_7[io_in_bits_index]},
+     {_GEN_23},
+     {_GEN_23},
      {io_in_bits_index[6]
-        ? _GEN_13[io_in_bits_index[5:0]]
-        : _GEN_10[io_in_bits_index[5:0]]},
+        ? _GEN_16[io_in_bits_index[5:0]]
+        : _GEN_13[io_in_bits_index[5:0]]},
      {io_in_bits_index[6]
-        ? _GEN_19[io_in_bits_index[5:0]]
-        : _GEN_16[io_in_bits_index[5:0]]},
-     {_GEN_4[io_in_bits_index]},
-     {_GEN_1[io_in_bits_index[5:0]]},
-     {_GEN_7[io_in_bits_index[5:0]]}};	// scala/SFU.scala:351:43, :352:33, :355:{23,29}, :356:23
-  wire [7:0][16:0]   _GEN_21 =
-    {{_GEN_3[io_in_bits_index]},
-     {_GEN_3[io_in_bits_index]},
-     {_GEN_3[io_in_bits_index]},
+        ? _GEN_22[io_in_bits_index[5:0]]
+        : _GEN_19[io_in_bits_index[5:0]]},
+     {_GEN_7[io_in_bits_index]},
+     {_GEN_4[io_in_bits_index[5:0]]},
+     {_GEN_10[io_in_bits_index[5:0]]}};	// scala/SFU.scala:407:43, :408:33, :411:{23,29}, :412:23
+  wire [7:0][16:0]   _GEN_27 =
+    {{_GEN_6[io_in_bits_index]},
+     {_GEN_24},
+     {_GEN_24},
      {io_in_bits_index[6]
-        ? _GEN_12[io_in_bits_index[5:0]]
-        : _GEN_9[io_in_bits_index[5:0]]},
+        ? _GEN_15[io_in_bits_index[5:0]]
+        : _GEN_12[io_in_bits_index[5:0]]},
      {io_in_bits_index[6]
-        ? _GEN_18[io_in_bits_index[5:0]]
-        : _GEN_15[io_in_bits_index[5:0]]},
-     {_GEN_3[io_in_bits_index]},
-     {_GEN_0[io_in_bits_index[5:0]]},
-     {_GEN_6[io_in_bits_index[5:0]]}};	// scala/SFU.scala:351:43, :352:33, :355:{23,29}, :356:23
-  wire [7:0][12:0]   _GEN_22 =
-    {{_GEN_2[io_in_bits_index]},
-     {_GEN_2[io_in_bits_index]},
-     {_GEN_2[io_in_bits_index]},
+        ? _GEN_21[io_in_bits_index[5:0]]
+        : _GEN_18[io_in_bits_index[5:0]]},
+     {_GEN_6[io_in_bits_index]},
+     {_GEN_3[io_in_bits_index[5:0]]},
+     {_GEN_9[io_in_bits_index[5:0]]}};	// scala/SFU.scala:407:43, :408:33, :411:{23,29}, :412:23
+  wire [7:0][12:0]   _GEN_28 =
+    {{_GEN_5[io_in_bits_index]},
+     {_GEN_25},
+     {_GEN_25},
      {io_in_bits_index[6]
-        ? _GEN_11[io_in_bits_index[5:0]]
-        : _GEN_8[io_in_bits_index[5:0]]},
+        ? _GEN_14[io_in_bits_index[5:0]]
+        : _GEN_11[io_in_bits_index[5:0]]},
      {io_in_bits_index[6]
-        ? _GEN_17[io_in_bits_index[5:0]]
-        : _GEN_14[io_in_bits_index[5:0]]},
-     {_GEN_2[io_in_bits_index]},
-     {_GEN[io_in_bits_index[5:0]]},
-     {_GEN_5[io_in_bits_index[5:0]]}};	// scala/SFU.scala:351:43, :352:33, :355:{23,29}, :356:23
-  wire               _s1Pipe_T = s1_ready & io_in_valid;	// scala/SFU.scala:102:43, src/main/scala/chisel3/util/Decoupled.scala:51:35
-  always @(posedge clock) begin	// scala/SFU.scala:289:7
-    if (reset)	// scala/SFU.scala:289:7
-      s1Pipe_rValid <= 1'h0;	// scala/SFU.scala:100:29
-    else	// scala/SFU.scala:289:7
-      s1Pipe_rValid <= _s1Pipe_T | ~(io_out_ready & s1Pipe_rValid) & s1Pipe_rValid;	// scala/SFU.scala:100:29, :105:36, :107:18, :108:31, :109:18, src/main/scala/chisel3/util/Decoupled.scala:51:35
+        ? _GEN_20[io_in_bits_index[5:0]]
+        : _GEN_17[io_in_bits_index[5:0]]},
+     {_GEN_5[io_in_bits_index]},
+     {_GEN_2[io_in_bits_index[5:0]]},
+     {_GEN_8[io_in_bits_index[5:0]]}};	// scala/SFU.scala:407:43, :408:33, :411:{23,29}, :412:23
+  wire               _s1Pipe_T = s1_ready & io_in_valid;	// scala/SFU.scala:111:43, src/main/scala/chisel3/util/Decoupled.scala:51:35
+  always @(posedge clock) begin	// scala/SFU.scala:357:7
+    if (reset)	// scala/SFU.scala:357:7
+      s1Pipe_rValid <= 1'h0;	// scala/SFU.scala:109:29
+    else	// scala/SFU.scala:357:7
+      s1Pipe_rValid <= _s1Pipe_T | ~(io_out_ready & s1Pipe_rValid) & s1Pipe_rValid;	// scala/SFU.scala:109:29, :114:36, :116:18, :117:31, :118:18, src/main/scala/chisel3/util/Decoupled.scala:51:35
     if (_s1Pipe_T) begin	// src/main/scala/chisel3/util/Decoupled.scala:51:35
-      s1Pipe_rBits_c0 <= _GEN_20[io_in_bits_op];	// scala/SFU.scala:101:25, :351:43
-      s1Pipe_rBits_c1 <= _GEN_21[io_in_bits_op];	// scala/SFU.scala:101:25, :351:43
-      s1Pipe_rBits_c2 <= _GEN_22[io_in_bits_op];	// scala/SFU.scala:101:25, :351:43
-      s1Pipe_rBits_throughout_op <= io_in_bits_throughout_op;	// scala/SFU.scala:101:25
-      s1Pipe_rBits_throughout_xl <= io_in_bits_throughout_xl;	// scala/SFU.scala:101:25
-      s1Pipe_rBits_throughout_exp <= io_in_bits_throughout_exp;	// scala/SFU.scala:101:25
-      s1Pipe_rBits_throughout_bypass <= io_in_bits_throughout_bypass;	// scala/SFU.scala:101:25
-      s1Pipe_rBits_throughout_bypassVal <= io_in_bits_throughout_bypassVal;	// scala/SFU.scala:101:25
+      s1Pipe_rBits_c0 <= _GEN_26[io_in_bits_op];	// scala/SFU.scala:110:25, :407:43
+      s1Pipe_rBits_c1 <= _GEN_27[io_in_bits_op];	// scala/SFU.scala:110:25, :407:43
+      s1Pipe_rBits_c2 <= _GEN_28[io_in_bits_op];	// scala/SFU.scala:110:25, :407:43
+      s1Pipe_rBits_xl <= io_in_bits_xl;	// scala/SFU.scala:110:25
+      s1Pipe_rBits_sign <= io_in_bits_sign;	// scala/SFU.scala:110:25
+      s1Pipe_rBits_exp <= io_in_bits_exp;	// scala/SFU.scala:110:25
+      s1Pipe_rBits_op <= io_in_bits_op;	// scala/SFU.scala:110:25
+      s1Pipe_rBits_bypass <= io_in_bits_bypass;	// scala/SFU.scala:110:25
+      s1Pipe_rBits_bypassVal <= io_in_bits_bypassVal;	// scala/SFU.scala:110:25
     end
   end // always @(posedge)
-  `ifdef ENABLE_INITIAL_REG_	// scala/SFU.scala:289:7
-    `ifdef FIRRTL_BEFORE_INITIAL	// scala/SFU.scala:289:7
-      `FIRRTL_BEFORE_INITIAL	// scala/SFU.scala:289:7
+  `ifdef ENABLE_INITIAL_REG_	// scala/SFU.scala:357:7
+    `ifdef FIRRTL_BEFORE_INITIAL	// scala/SFU.scala:357:7
+      `FIRRTL_BEFORE_INITIAL	// scala/SFU.scala:357:7
     `endif // FIRRTL_BEFORE_INITIAL
-    logic [31:0] _RANDOM[0:3];	// scala/SFU.scala:289:7
-    initial begin	// scala/SFU.scala:289:7
-      `ifdef INIT_RANDOM_PROLOG_	// scala/SFU.scala:289:7
-        `INIT_RANDOM_PROLOG_	// scala/SFU.scala:289:7
+    logic [31:0] _RANDOM[0:3];	// scala/SFU.scala:357:7
+    initial begin	// scala/SFU.scala:357:7
+      `ifdef INIT_RANDOM_PROLOG_	// scala/SFU.scala:357:7
+        `INIT_RANDOM_PROLOG_	// scala/SFU.scala:357:7
       `endif // INIT_RANDOM_PROLOG_
-      `ifdef RANDOMIZE_REG_INIT	// scala/SFU.scala:289:7
+      `ifdef RANDOMIZE_REG_INIT	// scala/SFU.scala:357:7
         for (logic [2:0] i = 3'h0; i < 3'h4; i += 3'h1) begin
-          _RANDOM[i[1:0]] = `RANDOM;	// scala/SFU.scala:289:7
-        end	// scala/SFU.scala:289:7
-        s1Pipe_rValid = _RANDOM[2'h0][0];	// scala/SFU.scala:100:29, :289:7
-        s1Pipe_rBits_c0 = _RANDOM[2'h0][27:1];	// scala/SFU.scala:100:29, :101:25, :289:7
-        s1Pipe_rBits_c1 = {_RANDOM[2'h0][31:28], _RANDOM[2'h1][12:0]};	// scala/SFU.scala:100:29, :101:25, :289:7
-        s1Pipe_rBits_c2 = _RANDOM[2'h1][25:13];	// scala/SFU.scala:101:25, :289:7
-        s1Pipe_rBits_throughout_op = _RANDOM[2'h1][28:26];	// scala/SFU.scala:101:25, :289:7
-        s1Pipe_rBits_throughout_xl = {_RANDOM[2'h1][31:29], _RANDOM[2'h2][13:0]};	// scala/SFU.scala:101:25, :289:7
-        s1Pipe_rBits_throughout_exp = _RANDOM[2'h2][21:14];	// scala/SFU.scala:101:25, :289:7
-        s1Pipe_rBits_throughout_bypass = _RANDOM[2'h2][22];	// scala/SFU.scala:101:25, :289:7
-        s1Pipe_rBits_throughout_bypassVal = {_RANDOM[2'h2][31:23], _RANDOM[2'h3][22:0]};	// scala/SFU.scala:101:25, :289:7
+          _RANDOM[i[1:0]] = `RANDOM;	// scala/SFU.scala:357:7
+        end	// scala/SFU.scala:357:7
+        s1Pipe_rValid = _RANDOM[2'h0][0];	// scala/SFU.scala:109:29, :357:7
+        s1Pipe_rBits_c0 = _RANDOM[2'h0][27:1];	// scala/SFU.scala:109:29, :110:25, :357:7
+        s1Pipe_rBits_c1 = {_RANDOM[2'h0][31:28], _RANDOM[2'h1][12:0]};	// scala/SFU.scala:109:29, :110:25, :357:7
+        s1Pipe_rBits_c2 = _RANDOM[2'h1][25:13];	// scala/SFU.scala:110:25, :357:7
+        s1Pipe_rBits_xl = {_RANDOM[2'h1][31:26], _RANDOM[2'h2][10:0]};	// scala/SFU.scala:110:25, :357:7
+        s1Pipe_rBits_sign = _RANDOM[2'h2][11];	// scala/SFU.scala:110:25, :357:7
+        s1Pipe_rBits_exp = _RANDOM[2'h2][19:12];	// scala/SFU.scala:110:25, :357:7
+        s1Pipe_rBits_op = _RANDOM[2'h2][22:20];	// scala/SFU.scala:110:25, :357:7
+        s1Pipe_rBits_bypass = _RANDOM[2'h2][23];	// scala/SFU.scala:110:25, :357:7
+        s1Pipe_rBits_bypassVal = {_RANDOM[2'h2][31:24], _RANDOM[2'h3][23:0]};	// scala/SFU.scala:110:25, :357:7
       `endif // RANDOMIZE_REG_INIT
     end // initial
-    `ifdef FIRRTL_AFTER_INITIAL	// scala/SFU.scala:289:7
-      `FIRRTL_AFTER_INITIAL	// scala/SFU.scala:289:7
+    `ifdef FIRRTL_AFTER_INITIAL	// scala/SFU.scala:357:7
+      `FIRRTL_AFTER_INITIAL	// scala/SFU.scala:357:7
     `endif // FIRRTL_AFTER_INITIAL
   `endif // ENABLE_INITIAL_REG_
-  assign io_in_ready = s1_ready;	// scala/SFU.scala:102:43, :289:7
-  assign io_out_valid = s1Pipe_rValid;	// scala/SFU.scala:100:29, :289:7
-  assign io_out_bits_c0 = s1Pipe_rBits_c0;	// scala/SFU.scala:101:25, :289:7
-  assign io_out_bits_c1 = s1Pipe_rBits_c1;	// scala/SFU.scala:101:25, :289:7
-  assign io_out_bits_c2 = s1Pipe_rBits_c2;	// scala/SFU.scala:101:25, :289:7
-  assign io_out_bits_throughout_op = s1Pipe_rBits_throughout_op;	// scala/SFU.scala:101:25, :289:7
-  assign io_out_bits_throughout_xl = s1Pipe_rBits_throughout_xl;	// scala/SFU.scala:101:25, :289:7
-  assign io_out_bits_throughout_exp = s1Pipe_rBits_throughout_exp;	// scala/SFU.scala:101:25, :289:7
-  assign io_out_bits_throughout_bypass = s1Pipe_rBits_throughout_bypass;	// scala/SFU.scala:101:25, :289:7
-  assign io_out_bits_throughout_bypassVal = s1Pipe_rBits_throughout_bypassVal;	// scala/SFU.scala:101:25, :289:7
+  assign io_in_ready = s1_ready;	// scala/SFU.scala:111:43, :357:7
+  assign io_out_valid = s1Pipe_rValid;	// scala/SFU.scala:109:29, :357:7
+  assign io_out_bits_c0 = s1Pipe_rBits_c0;	// scala/SFU.scala:110:25, :357:7
+  assign io_out_bits_c1 = s1Pipe_rBits_c1;	// scala/SFU.scala:110:25, :357:7
+  assign io_out_bits_c2 = s1Pipe_rBits_c2;	// scala/SFU.scala:110:25, :357:7
+  assign io_out_bits_xl = s1Pipe_rBits_xl;	// scala/SFU.scala:110:25, :357:7
+  assign io_out_bits_sign = s1Pipe_rBits_sign;	// scala/SFU.scala:110:25, :357:7
+  assign io_out_bits_exp = s1Pipe_rBits_exp;	// scala/SFU.scala:110:25, :357:7
+  assign io_out_bits_op = s1Pipe_rBits_op;	// scala/SFU.scala:110:25, :357:7
+  assign io_out_bits_bypass = s1Pipe_rBits_bypass;	// scala/SFU.scala:110:25, :357:7
+  assign io_out_bits_bypassVal = s1Pipe_rBits_bypassVal;	// scala/SFU.scala:110:25, :357:7
 endmodule
 
-module Poly(	// scala/SFU.scala:372:7
-  input         clock,	// scala/SFU.scala:372:7
-                reset,	// scala/SFU.scala:372:7
-  output        io_in_ready,	// scala/SFU.scala:387:14
-  input         io_in_valid,	// scala/SFU.scala:387:14
-  input  [26:0] io_in_bits_c0,	// scala/SFU.scala:387:14
-  input  [16:0] io_in_bits_c1,	// scala/SFU.scala:387:14
-  input  [12:0] io_in_bits_c2,	// scala/SFU.scala:387:14
-  input  [16:0] io_in_bits_xl,	// scala/SFU.scala:387:14
-  input  [2:0]  io_in_bits_op,	// scala/SFU.scala:387:14
-                io_in_bits_throughout_op,	// scala/SFU.scala:387:14
-  input  [7:0]  io_in_bits_throughout_exp,	// scala/SFU.scala:387:14
-  input         io_in_bits_throughout_bypass,	// scala/SFU.scala:387:14
-  input  [31:0] io_in_bits_throughout_bypassVal,	// scala/SFU.scala:387:14
-  input         io_out_ready,	// scala/SFU.scala:387:14
-  output        io_out_valid,	// scala/SFU.scala:387:14
-  output [25:0] io_out_bits_result,	// scala/SFU.scala:387:14
-  output [2:0]  io_out_bits_throughout_op,	// scala/SFU.scala:387:14
-  output [7:0]  io_out_bits_throughout_exp,	// scala/SFU.scala:387:14
-  output        io_out_bits_throughout_bypass,	// scala/SFU.scala:387:14
-  output [31:0] io_out_bits_throughout_bypassVal	// scala/SFU.scala:387:14
+module Poly(	// scala/SFU.scala:435:7
+  input         clock,	// scala/SFU.scala:435:7
+                reset,	// scala/SFU.scala:435:7
+  output        io_in_ready,	// scala/SFU.scala:436:14
+  input         io_in_valid,	// scala/SFU.scala:436:14
+  input  [26:0] io_in_bits_c0,	// scala/SFU.scala:436:14
+  input  [16:0] io_in_bits_c1,	// scala/SFU.scala:436:14
+  input  [12:0] io_in_bits_c2,	// scala/SFU.scala:436:14
+  input  [16:0] io_in_bits_xl,	// scala/SFU.scala:436:14
+  input         io_in_bits_sign,	// scala/SFU.scala:436:14
+  input  [7:0]  io_in_bits_exp,	// scala/SFU.scala:436:14
+  input  [2:0]  io_in_bits_op,	// scala/SFU.scala:436:14
+  input         io_in_bits_bypass,	// scala/SFU.scala:436:14
+  input  [31:0] io_in_bits_bypassVal,	// scala/SFU.scala:436:14
+  input         io_out_ready,	// scala/SFU.scala:436:14
+  output        io_out_valid,	// scala/SFU.scala:436:14
+  output [26:0] io_out_bits_polyResult,	// scala/SFU.scala:436:14
+  output        io_out_bits_sign,	// scala/SFU.scala:436:14
+  output [7:0]  io_out_bits_exp,	// scala/SFU.scala:436:14
+  output [2:0]  io_out_bits_op,	// scala/SFU.scala:436:14
+  output        io_out_bits_bypass,	// scala/SFU.scala:436:14
+  output [31:0] io_out_bits_bypassVal	// scala/SFU.scala:436:14
 );
 
-  wire            s3_ready;	// scala/SFU.scala:102:43
-  wire            s2_ready;	// scala/SFU.scala:102:43
-  reg             s1Pipe_rValid;	// scala/SFU.scala:100:29
-  reg  [2:0]      s1Pipe_rBits_op;	// scala/SFU.scala:101:25
-  reg  [26:0]     s1Pipe_rBits_c0;	// scala/SFU.scala:101:25
-  reg  [16:0]     s1Pipe_rBits_c1;	// scala/SFU.scala:101:25
-  reg  [12:0]     s1Pipe_rBits_c2;	// scala/SFU.scala:101:25
-  reg  [16:0]     s1Pipe_rBits_xl;	// scala/SFU.scala:101:25
-  reg  [14:0]     s1Pipe_rBits_xl2;	// scala/SFU.scala:101:25
-  reg  [2:0]      s1Pipe_rBits_throughout_op;	// scala/SFU.scala:101:25
-  reg  [7:0]      s1Pipe_rBits_throughout_exp;	// scala/SFU.scala:101:25
-  reg             s1Pipe_rBits_throughout_bypass;	// scala/SFU.scala:101:25
-  reg  [31:0]     s1Pipe_rBits_throughout_bypassVal;	// scala/SFU.scala:101:25
-  wire            s1_ready = ~s1Pipe_rValid | s2_ready;	// scala/SFU.scala:100:29, :102:{35,43}
-  reg             s2Pipe_rValid;	// scala/SFU.scala:100:29
-  reg  [2:0]      s2Pipe_rBits_op;	// scala/SFU.scala:101:25
-  reg  [26:0]     s2Pipe_rBits_c0;	// scala/SFU.scala:101:25
-  reg  [34:0]     s2Pipe_rBits_c1Xl;	// scala/SFU.scala:101:25
-  reg  [28:0]     s2Pipe_rBits_c2Xl2;	// scala/SFU.scala:101:25
-  reg  [2:0]      s2Pipe_rBits_throughout_op;	// scala/SFU.scala:101:25
-  reg  [7:0]      s2Pipe_rBits_throughout_exp;	// scala/SFU.scala:101:25
-  reg             s2Pipe_rBits_throughout_bypass;	// scala/SFU.scala:101:25
-  reg  [31:0]     s2Pipe_rBits_throughout_bypassVal;	// scala/SFU.scala:101:25
-  assign s2_ready = ~s2Pipe_rValid | s3_ready;	// scala/SFU.scala:100:29, :102:{35,43}
-  reg             s3Pipe_rValid;	// scala/SFU.scala:100:29
-  reg  [25:0]     s3Pipe_rBits_result;	// scala/SFU.scala:101:25
-  reg  [2:0]      s3Pipe_rBits_throughout_op;	// scala/SFU.scala:101:25
-  reg  [7:0]      s3Pipe_rBits_throughout_exp;	// scala/SFU.scala:101:25
-  reg             s3Pipe_rBits_throughout_bypass;	// scala/SFU.scala:101:25
-  reg  [31:0]     s3Pipe_rBits_throughout_bypassVal;	// scala/SFU.scala:101:25
-  assign s3_ready = ~s3Pipe_rValid | io_out_ready;	// scala/SFU.scala:100:29, :102:{35,43}
-  wire [33:0]     _GEN = {17'h0, io_in_bits_xl};	// scala/SFU.scala:393:32
-  wire [33:0]     _aligned0_T =
+  wire        s3_ready;	// scala/SFU.scala:111:43
+  wire        s2_ready;	// scala/SFU.scala:111:43
+  reg         s1Pipe_rValid;	// scala/SFU.scala:109:29
+  reg  [2:0]  s1Pipe_rBits_op;	// scala/SFU.scala:110:25
+  reg  [26:0] s1Pipe_rBits_c0;	// scala/SFU.scala:110:25
+  reg  [16:0] s1Pipe_rBits_c1;	// scala/SFU.scala:110:25
+  reg  [12:0] s1Pipe_rBits_c2;	// scala/SFU.scala:110:25
+  reg  [16:0] s1Pipe_rBits_xl;	// scala/SFU.scala:110:25
+  reg  [14:0] s1Pipe_rBits_xl2;	// scala/SFU.scala:110:25
+  reg  [7:0]  s1Pipe_rBits_exp;	// scala/SFU.scala:110:25
+  reg         s1Pipe_rBits_sign;	// scala/SFU.scala:110:25
+  reg         s1Pipe_rBits_bypass;	// scala/SFU.scala:110:25
+  reg  [31:0] s1Pipe_rBits_bypassVal;	// scala/SFU.scala:110:25
+  wire        s1_ready = ~s1Pipe_rValid | s2_ready;	// scala/SFU.scala:109:29, :111:{35,43}
+  reg         s2Pipe_rValid;	// scala/SFU.scala:109:29
+  reg  [2:0]  s2Pipe_rBits_op;	// scala/SFU.scala:110:25
+  reg  [26:0] s2Pipe_rBits_c0;	// scala/SFU.scala:110:25
+  reg  [34:0] s2Pipe_rBits_c1Xl;	// scala/SFU.scala:110:25
+  reg  [28:0] s2Pipe_rBits_c2Xl2;	// scala/SFU.scala:110:25
+  reg  [7:0]  s2Pipe_rBits_exp;	// scala/SFU.scala:110:25
+  reg         s2Pipe_rBits_sign;	// scala/SFU.scala:110:25
+  reg         s2Pipe_rBits_bypass;	// scala/SFU.scala:110:25
+  reg  [31:0] s2Pipe_rBits_bypassVal;	// scala/SFU.scala:110:25
+  assign s2_ready = ~s2Pipe_rValid | s3_ready;	// scala/SFU.scala:109:29, :111:{35,43}
+  reg         s3Pipe_rValid;	// scala/SFU.scala:109:29
+  reg  [26:0] s3Pipe_rBits_polyResult;	// scala/SFU.scala:110:25
+  reg         s3Pipe_rBits_sign;	// scala/SFU.scala:110:25
+  reg  [7:0]  s3Pipe_rBits_exp;	// scala/SFU.scala:110:25
+  reg  [2:0]  s3Pipe_rBits_op;	// scala/SFU.scala:110:25
+  reg         s3Pipe_rBits_bypass;	// scala/SFU.scala:110:25
+  reg  [31:0] s3Pipe_rBits_bypassVal;	// scala/SFU.scala:110:25
+  assign s3_ready = ~s3Pipe_rValid | io_out_ready;	// scala/SFU.scala:109:29, :111:{35,43}
+  wire [33:0] _GEN = {17'h0, io_in_bits_xl};	// scala/SFU.scala:442:32
+  wire [33:0] _aligned0_T =
     _GEN * _GEN
-    >> (io_in_bits_op == 3'h4 | io_in_bits_op == 3'h3
+    >> (io_in_bits_op == 3'h6 | io_in_bits_op == 3'h5 | io_in_bits_op == 3'h4
+        | io_in_bits_op == 3'h3
           ? 5'h13
           : io_in_bits_op == 3'h2
               ? 5'h11
-              : io_in_bits_op == 3'h1 | io_in_bits_op == 3'h0 ? 5'h13 : 5'h0);	// scala/SFU.scala:50:29, :393:32, :395:23
-  wire [7:0][4:0] _GEN_0 = '{5'h0, 5'h0, 5'h0, 5'hE, 5'h10, 5'hF, 5'hD, 5'hF};	// scala/SFU.scala:60:29, :69:29
-  wire [28:0]     aligned2 =
-    $signed($signed(s2Pipe_rBits_c2Xl2) >>> _GEN_0[s2Pipe_rBits_op]);	// scala/SFU.scala:60:29, :69:29, :101:25, :447:37
-  wire [34:0]     aligned1 =
+              : io_in_bits_op == 3'h1 | io_in_bits_op == 3'h0 ? 5'h13 : 5'h0);	// scala/SFU.scala:53:29, :442:32, :444:23
+  wire        _shift2_T = s2Pipe_rBits_op == 3'h0;	// scala/SFU.scala:53:29, :65:29, :110:25
+  wire        _shift2_T_2 = s2Pipe_rBits_op == 3'h1;	// scala/SFU.scala:53:29, :65:29, :110:25
+  wire        _shift2_T_4 = s2Pipe_rBits_op == 3'h2;	// scala/SFU.scala:53:29, :65:29, :110:25
+  wire        _shift2_T_6 = s2Pipe_rBits_op == 3'h3;	// scala/SFU.scala:53:29, :65:29, :110:25
+  wire        _shift2_T_8 = s2Pipe_rBits_op == 3'h4;	// scala/SFU.scala:53:29, :65:29, :110:25
+  wire        _GEN_0 = s2Pipe_rBits_op == 3'h6 | s2Pipe_rBits_op == 3'h5;	// scala/SFU.scala:53:29, :65:29, :110:25
+  wire [28:0] aligned2 =
+    $signed($signed(s2Pipe_rBits_c2Xl2)
+            >>> (_GEN_0
+                   ? 5'hC
+                   : _shift2_T_8
+                       ? 5'hE
+                       : _shift2_T_6
+                           ? 5'h10
+                           : _shift2_T_4
+                               ? 5'hF
+                               : _shift2_T_2 ? 5'hD : _shift2_T ? 5'hF : 5'h0));	// scala/SFU.scala:53:29, :65:29, :76:29, :110:25, :508:37
+  wire [34:0] aligned1 =
     $signed($signed(s2Pipe_rBits_c1Xl)
-            >>> (s2Pipe_rBits_op == 3'h4 | s2Pipe_rBits_op == 3'h3
-                   ? 5'hE
-                   : s2Pipe_rBits_op == 3'h2
-                       ? 5'hD
-                       : s2Pipe_rBits_op == 3'h1
-                           ? 5'hC
-                           : s2Pipe_rBits_op == 3'h0 ? 5'hD : 5'h0));	// scala/SFU.scala:50:29, :60:29, :101:25, :446:37
-  wire            _s1Pipe_T = s1_ready & io_in_valid;	// scala/SFU.scala:102:43, src/main/scala/chisel3/util/Decoupled.scala:51:35
-  wire            _s2Pipe_T = s2_ready & s1Pipe_rValid;	// scala/SFU.scala:100:29, :102:43, src/main/scala/chisel3/util/Decoupled.scala:51:35
-  wire            _s3Pipe_T = s3_ready & s2Pipe_rValid;	// scala/SFU.scala:100:29, :102:43, src/main/scala/chisel3/util/Decoupled.scala:51:35
-  always @(posedge clock) begin	// scala/SFU.scala:372:7
-    if (reset) begin	// scala/SFU.scala:372:7
-      s1Pipe_rValid <= 1'h0;	// scala/SFU.scala:100:29
-      s2Pipe_rValid <= 1'h0;	// scala/SFU.scala:100:29
-      s3Pipe_rValid <= 1'h0;	// scala/SFU.scala:100:29
+            >>> (_GEN_0
+                   ? 5'hC
+                   : _shift2_T_8 | _shift2_T_6
+                       ? 5'hE
+                       : _shift2_T_4
+                           ? 5'hD
+                           : _shift2_T_2 ? 5'hC : _shift2_T ? 5'hD : 5'h0));	// scala/SFU.scala:53:29, :65:29, :110:25, :507:37
+  wire        _s1Pipe_T = s1_ready & io_in_valid;	// scala/SFU.scala:111:43, src/main/scala/chisel3/util/Decoupled.scala:51:35
+  wire        _s2Pipe_T = s2_ready & s1Pipe_rValid;	// scala/SFU.scala:109:29, :111:43, src/main/scala/chisel3/util/Decoupled.scala:51:35
+  wire        _s3Pipe_T = s3_ready & s2Pipe_rValid;	// scala/SFU.scala:109:29, :111:43, src/main/scala/chisel3/util/Decoupled.scala:51:35
+  always @(posedge clock) begin	// scala/SFU.scala:435:7
+    if (reset) begin	// scala/SFU.scala:435:7
+      s1Pipe_rValid <= 1'h0;	// scala/SFU.scala:109:29
+      s2Pipe_rValid <= 1'h0;	// scala/SFU.scala:109:29
+      s3Pipe_rValid <= 1'h0;	// scala/SFU.scala:109:29
     end
-    else begin	// scala/SFU.scala:372:7
-      s1Pipe_rValid <= _s1Pipe_T | ~(s2_ready & s1Pipe_rValid) & s1Pipe_rValid;	// scala/SFU.scala:100:29, :102:43, :105:36, :107:18, :108:31, :109:18, src/main/scala/chisel3/util/Decoupled.scala:51:35
-      s2Pipe_rValid <= _s2Pipe_T | ~(s3_ready & s2Pipe_rValid) & s2Pipe_rValid;	// scala/SFU.scala:100:29, :102:43, :105:36, :107:18, :108:31, :109:18, src/main/scala/chisel3/util/Decoupled.scala:51:35
-      s3Pipe_rValid <= _s3Pipe_T | ~(io_out_ready & s3Pipe_rValid) & s3Pipe_rValid;	// scala/SFU.scala:100:29, :105:36, :107:18, :108:31, :109:18, src/main/scala/chisel3/util/Decoupled.scala:51:35
+    else begin	// scala/SFU.scala:435:7
+      s1Pipe_rValid <= _s1Pipe_T | ~(s2_ready & s1Pipe_rValid) & s1Pipe_rValid;	// scala/SFU.scala:109:29, :111:43, :114:36, :116:18, :117:31, :118:18, src/main/scala/chisel3/util/Decoupled.scala:51:35
+      s2Pipe_rValid <= _s2Pipe_T | ~(s3_ready & s2Pipe_rValid) & s2Pipe_rValid;	// scala/SFU.scala:109:29, :111:43, :114:36, :116:18, :117:31, :118:18, src/main/scala/chisel3/util/Decoupled.scala:51:35
+      s3Pipe_rValid <= _s3Pipe_T | ~(io_out_ready & s3Pipe_rValid) & s3Pipe_rValid;	// scala/SFU.scala:109:29, :114:36, :116:18, :117:31, :118:18, src/main/scala/chisel3/util/Decoupled.scala:51:35
     end
     if (_s1Pipe_T) begin	// src/main/scala/chisel3/util/Decoupled.scala:51:35
-      s1Pipe_rBits_op <= io_in_bits_op;	// scala/SFU.scala:101:25
-      s1Pipe_rBits_c0 <= io_in_bits_c0;	// scala/SFU.scala:101:25
-      s1Pipe_rBits_c1 <= io_in_bits_c1;	// scala/SFU.scala:101:25
-      s1Pipe_rBits_c2 <= io_in_bits_c2;	// scala/SFU.scala:101:25
-      s1Pipe_rBits_xl <= io_in_bits_xl;	// scala/SFU.scala:101:25
-      s1Pipe_rBits_xl2 <= _aligned0_T[14:0];	// scala/SFU.scala:101:25, :395:{23,33}
-      s1Pipe_rBits_throughout_op <= io_in_bits_throughout_op;	// scala/SFU.scala:101:25
-      s1Pipe_rBits_throughout_exp <= io_in_bits_throughout_exp;	// scala/SFU.scala:101:25
-      s1Pipe_rBits_throughout_bypass <= io_in_bits_throughout_bypass;	// scala/SFU.scala:101:25
-      s1Pipe_rBits_throughout_bypassVal <= io_in_bits_throughout_bypassVal;	// scala/SFU.scala:101:25
+      s1Pipe_rBits_op <= io_in_bits_op;	// scala/SFU.scala:110:25
+      s1Pipe_rBits_c0 <= io_in_bits_c0;	// scala/SFU.scala:110:25
+      s1Pipe_rBits_c1 <= io_in_bits_c1;	// scala/SFU.scala:110:25
+      s1Pipe_rBits_c2 <= io_in_bits_c2;	// scala/SFU.scala:110:25
+      s1Pipe_rBits_xl <= io_in_bits_xl;	// scala/SFU.scala:110:25
+      s1Pipe_rBits_xl2 <= _aligned0_T[14:0];	// scala/SFU.scala:110:25, :444:{23,33}
+      s1Pipe_rBits_exp <= io_in_bits_exp;	// scala/SFU.scala:110:25
+      s1Pipe_rBits_sign <= io_in_bits_sign;	// scala/SFU.scala:110:25
+      s1Pipe_rBits_bypass <= io_in_bits_bypass;	// scala/SFU.scala:110:25
+      s1Pipe_rBits_bypassVal <= io_in_bits_bypassVal;	// scala/SFU.scala:110:25
     end
     if (_s2Pipe_T) begin	// src/main/scala/chisel3/util/Decoupled.scala:51:35
-      s2Pipe_rBits_op <= s1Pipe_rBits_op;	// scala/SFU.scala:101:25
-      s2Pipe_rBits_c0 <= s1Pipe_rBits_c0;	// scala/SFU.scala:101:25
+      s2Pipe_rBits_op <= s1Pipe_rBits_op;	// scala/SFU.scala:110:25
+      s2Pipe_rBits_c0 <= s1Pipe_rBits_c0;	// scala/SFU.scala:110:25
       s2Pipe_rBits_c1Xl <=
-        {{18{s1Pipe_rBits_c1[16]}}, s1Pipe_rBits_c1} * {18'h0, s1Pipe_rBits_xl};	// scala/SFU.scala:101:25, :423:30
+        {{18{s1Pipe_rBits_c1[16]}}, s1Pipe_rBits_c1} * {18'h0, s1Pipe_rBits_xl};	// scala/SFU.scala:110:25, :478:30
       s2Pipe_rBits_c2Xl2 <=
-        {{16{s1Pipe_rBits_c2[12]}}, s1Pipe_rBits_c2} * {14'h0, s1Pipe_rBits_xl2};	// scala/SFU.scala:101:25, :422:30
-      s2Pipe_rBits_throughout_op <= s1Pipe_rBits_throughout_op;	// scala/SFU.scala:101:25
-      s2Pipe_rBits_throughout_exp <= s1Pipe_rBits_throughout_exp;	// scala/SFU.scala:101:25
-      s2Pipe_rBits_throughout_bypass <= s1Pipe_rBits_throughout_bypass;	// scala/SFU.scala:101:25
-      s2Pipe_rBits_throughout_bypassVal <= s1Pipe_rBits_throughout_bypassVal;	// scala/SFU.scala:101:25
+        {{16{s1Pipe_rBits_c2[12]}}, s1Pipe_rBits_c2} * {14'h0, s1Pipe_rBits_xl2};	// scala/SFU.scala:110:25, :477:30
+      s2Pipe_rBits_exp <= s1Pipe_rBits_exp;	// scala/SFU.scala:110:25
+      s2Pipe_rBits_sign <= s1Pipe_rBits_sign;	// scala/SFU.scala:110:25
+      s2Pipe_rBits_bypass <= s1Pipe_rBits_bypass;	// scala/SFU.scala:110:25
+      s2Pipe_rBits_bypassVal <= s1Pipe_rBits_bypassVal;	// scala/SFU.scala:110:25
     end
     if (_s3Pipe_T) begin	// src/main/scala/chisel3/util/Decoupled.scala:51:35
-      s3Pipe_rBits_result <= s2Pipe_rBits_c0[25:0] + aligned1[25:0] + aligned2[25:0];	// scala/SFU.scala:101:25, :446:37, :447:37, :449:{32,43}
-      s3Pipe_rBits_throughout_op <= s2Pipe_rBits_throughout_op;	// scala/SFU.scala:101:25
-      s3Pipe_rBits_throughout_exp <= s2Pipe_rBits_throughout_exp;	// scala/SFU.scala:101:25
-      s3Pipe_rBits_throughout_bypass <= s2Pipe_rBits_throughout_bypass;	// scala/SFU.scala:101:25
-      s3Pipe_rBits_throughout_bypassVal <= s2Pipe_rBits_throughout_bypassVal;	// scala/SFU.scala:101:25
+      s3Pipe_rBits_polyResult <= s2Pipe_rBits_c0 + aligned1[26:0] + aligned2[26:0];	// scala/SFU.scala:110:25, :507:37, :508:37, :510:43
+      s3Pipe_rBits_sign <= s2Pipe_rBits_sign;	// scala/SFU.scala:110:25
+      s3Pipe_rBits_exp <= s2Pipe_rBits_exp;	// scala/SFU.scala:110:25
+      s3Pipe_rBits_op <= s2Pipe_rBits_op;	// scala/SFU.scala:110:25
+      s3Pipe_rBits_bypass <= s2Pipe_rBits_bypass;	// scala/SFU.scala:110:25
+      s3Pipe_rBits_bypassVal <= s2Pipe_rBits_bypassVal;	// scala/SFU.scala:110:25
     end
   end // always @(posedge)
-  `ifdef ENABLE_INITIAL_REG_	// scala/SFU.scala:372:7
-    `ifdef FIRRTL_BEFORE_INITIAL	// scala/SFU.scala:372:7
-      `FIRRTL_BEFORE_INITIAL	// scala/SFU.scala:372:7
+  `ifdef ENABLE_INITIAL_REG_	// scala/SFU.scala:435:7
+    `ifdef FIRRTL_BEFORE_INITIAL	// scala/SFU.scala:435:7
+      `FIRRTL_BEFORE_INITIAL	// scala/SFU.scala:435:7
     `endif // FIRRTL_BEFORE_INITIAL
-    logic [31:0] _RANDOM[0:10];	// scala/SFU.scala:372:7
-    initial begin	// scala/SFU.scala:372:7
-      `ifdef INIT_RANDOM_PROLOG_	// scala/SFU.scala:372:7
-        `INIT_RANDOM_PROLOG_	// scala/SFU.scala:372:7
+    logic [31:0] _RANDOM[0:10];	// scala/SFU.scala:435:7
+    initial begin	// scala/SFU.scala:435:7
+      `ifdef INIT_RANDOM_PROLOG_	// scala/SFU.scala:435:7
+        `INIT_RANDOM_PROLOG_	// scala/SFU.scala:435:7
       `endif // INIT_RANDOM_PROLOG_
-      `ifdef RANDOMIZE_REG_INIT	// scala/SFU.scala:372:7
+      `ifdef RANDOMIZE_REG_INIT	// scala/SFU.scala:435:7
         for (logic [3:0] i = 4'h0; i < 4'hB; i += 4'h1) begin
-          _RANDOM[i] = `RANDOM;	// scala/SFU.scala:372:7
-        end	// scala/SFU.scala:372:7
-        s1Pipe_rValid = _RANDOM[4'h0][0];	// scala/SFU.scala:100:29, :372:7
-        s1Pipe_rBits_op = _RANDOM[4'h0][3:1];	// scala/SFU.scala:100:29, :101:25, :372:7
-        s1Pipe_rBits_c0 = _RANDOM[4'h0][30:4];	// scala/SFU.scala:100:29, :101:25, :372:7
-        s1Pipe_rBits_c1 = {_RANDOM[4'h0][31], _RANDOM[4'h1][15:0]};	// scala/SFU.scala:100:29, :101:25, :372:7
-        s1Pipe_rBits_c2 = _RANDOM[4'h1][28:16];	// scala/SFU.scala:101:25, :372:7
-        s1Pipe_rBits_xl = {_RANDOM[4'h1][31:29], _RANDOM[4'h2][13:0]};	// scala/SFU.scala:101:25, :372:7
-        s1Pipe_rBits_xl2 = _RANDOM[4'h2][28:14];	// scala/SFU.scala:101:25, :372:7
-        s1Pipe_rBits_throughout_op = _RANDOM[4'h2][31:29];	// scala/SFU.scala:101:25, :372:7
-        s1Pipe_rBits_throughout_exp = _RANDOM[4'h3][7:0];	// scala/SFU.scala:101:25, :372:7
-        s1Pipe_rBits_throughout_bypass = _RANDOM[4'h3][8];	// scala/SFU.scala:101:25, :372:7
-        s1Pipe_rBits_throughout_bypassVal = {_RANDOM[4'h3][31:9], _RANDOM[4'h4][8:0]};	// scala/SFU.scala:101:25, :372:7
-        s2Pipe_rValid = _RANDOM[4'h4][9];	// scala/SFU.scala:100:29, :101:25, :372:7
-        s2Pipe_rBits_op = _RANDOM[4'h4][12:10];	// scala/SFU.scala:101:25, :372:7
-        s2Pipe_rBits_c0 = {_RANDOM[4'h4][31:13], _RANDOM[4'h5][7:0]};	// scala/SFU.scala:101:25, :372:7
-        s2Pipe_rBits_c1Xl = {_RANDOM[4'h5][31:8], _RANDOM[4'h6][10:0]};	// scala/SFU.scala:101:25, :372:7
-        s2Pipe_rBits_c2Xl2 = {_RANDOM[4'h6][31:11], _RANDOM[4'h7][7:0]};	// scala/SFU.scala:101:25, :372:7
-        s2Pipe_rBits_throughout_op = _RANDOM[4'h7][10:8];	// scala/SFU.scala:101:25, :372:7
-        s2Pipe_rBits_throughout_exp = _RANDOM[4'h7][18:11];	// scala/SFU.scala:101:25, :372:7
-        s2Pipe_rBits_throughout_bypass = _RANDOM[4'h7][19];	// scala/SFU.scala:101:25, :372:7
-        s2Pipe_rBits_throughout_bypassVal = {_RANDOM[4'h7][31:20], _RANDOM[4'h8][19:0]};	// scala/SFU.scala:101:25, :372:7
-        s3Pipe_rValid = _RANDOM[4'h8][20];	// scala/SFU.scala:100:29, :101:25, :372:7
-        s3Pipe_rBits_result = {_RANDOM[4'h8][31:21], _RANDOM[4'h9][14:0]};	// scala/SFU.scala:101:25, :372:7
-        s3Pipe_rBits_throughout_op = _RANDOM[4'h9][17:15];	// scala/SFU.scala:101:25, :372:7
-        s3Pipe_rBits_throughout_exp = _RANDOM[4'h9][25:18];	// scala/SFU.scala:101:25, :372:7
-        s3Pipe_rBits_throughout_bypass = _RANDOM[4'h9][26];	// scala/SFU.scala:101:25, :372:7
-        s3Pipe_rBits_throughout_bypassVal = {_RANDOM[4'h9][31:27], _RANDOM[4'hA][26:0]};	// scala/SFU.scala:101:25, :372:7
+          _RANDOM[i] = `RANDOM;	// scala/SFU.scala:435:7
+        end	// scala/SFU.scala:435:7
+        s1Pipe_rValid = _RANDOM[4'h0][0];	// scala/SFU.scala:109:29, :435:7
+        s1Pipe_rBits_op = _RANDOM[4'h0][3:1];	// scala/SFU.scala:109:29, :110:25, :435:7
+        s1Pipe_rBits_c0 = _RANDOM[4'h0][30:4];	// scala/SFU.scala:109:29, :110:25, :435:7
+        s1Pipe_rBits_c1 = {_RANDOM[4'h0][31], _RANDOM[4'h1][15:0]};	// scala/SFU.scala:109:29, :110:25, :435:7
+        s1Pipe_rBits_c2 = _RANDOM[4'h1][28:16];	// scala/SFU.scala:110:25, :435:7
+        s1Pipe_rBits_xl = {_RANDOM[4'h1][31:29], _RANDOM[4'h2][13:0]};	// scala/SFU.scala:110:25, :435:7
+        s1Pipe_rBits_xl2 = _RANDOM[4'h2][28:14];	// scala/SFU.scala:110:25, :435:7
+        s1Pipe_rBits_exp = {_RANDOM[4'h2][31:29], _RANDOM[4'h3][4:0]};	// scala/SFU.scala:110:25, :435:7
+        s1Pipe_rBits_sign = _RANDOM[4'h3][5];	// scala/SFU.scala:110:25, :435:7
+        s1Pipe_rBits_bypass = _RANDOM[4'h3][6];	// scala/SFU.scala:110:25, :435:7
+        s1Pipe_rBits_bypassVal = {_RANDOM[4'h3][31:7], _RANDOM[4'h4][6:0]};	// scala/SFU.scala:110:25, :435:7
+        s2Pipe_rValid = _RANDOM[4'h4][7];	// scala/SFU.scala:109:29, :110:25, :435:7
+        s2Pipe_rBits_op = _RANDOM[4'h4][10:8];	// scala/SFU.scala:110:25, :435:7
+        s2Pipe_rBits_c0 = {_RANDOM[4'h4][31:11], _RANDOM[4'h5][5:0]};	// scala/SFU.scala:110:25, :435:7
+        s2Pipe_rBits_c1Xl = {_RANDOM[4'h5][31:6], _RANDOM[4'h6][8:0]};	// scala/SFU.scala:110:25, :435:7
+        s2Pipe_rBits_c2Xl2 = {_RANDOM[4'h6][31:9], _RANDOM[4'h7][5:0]};	// scala/SFU.scala:110:25, :435:7
+        s2Pipe_rBits_exp = _RANDOM[4'h7][13:6];	// scala/SFU.scala:110:25, :435:7
+        s2Pipe_rBits_sign = _RANDOM[4'h7][14];	// scala/SFU.scala:110:25, :435:7
+        s2Pipe_rBits_bypass = _RANDOM[4'h7][15];	// scala/SFU.scala:110:25, :435:7
+        s2Pipe_rBits_bypassVal = {_RANDOM[4'h7][31:16], _RANDOM[4'h8][15:0]};	// scala/SFU.scala:110:25, :435:7
+        s3Pipe_rValid = _RANDOM[4'h8][16];	// scala/SFU.scala:109:29, :110:25, :435:7
+        s3Pipe_rBits_polyResult = {_RANDOM[4'h8][31:17], _RANDOM[4'h9][11:0]};	// scala/SFU.scala:110:25, :435:7
+        s3Pipe_rBits_sign = _RANDOM[4'h9][12];	// scala/SFU.scala:110:25, :435:7
+        s3Pipe_rBits_exp = _RANDOM[4'h9][20:13];	// scala/SFU.scala:110:25, :435:7
+        s3Pipe_rBits_op = _RANDOM[4'h9][23:21];	// scala/SFU.scala:110:25, :435:7
+        s3Pipe_rBits_bypass = _RANDOM[4'h9][24];	// scala/SFU.scala:110:25, :435:7
+        s3Pipe_rBits_bypassVal = {_RANDOM[4'h9][31:25], _RANDOM[4'hA][24:0]};	// scala/SFU.scala:110:25, :435:7
       `endif // RANDOMIZE_REG_INIT
     end // initial
-    `ifdef FIRRTL_AFTER_INITIAL	// scala/SFU.scala:372:7
-      `FIRRTL_AFTER_INITIAL	// scala/SFU.scala:372:7
+    `ifdef FIRRTL_AFTER_INITIAL	// scala/SFU.scala:435:7
+      `FIRRTL_AFTER_INITIAL	// scala/SFU.scala:435:7
     `endif // FIRRTL_AFTER_INITIAL
   `endif // ENABLE_INITIAL_REG_
-  assign io_in_ready = s1_ready;	// scala/SFU.scala:102:43, :372:7
-  assign io_out_valid = s3Pipe_rValid;	// scala/SFU.scala:100:29, :372:7
-  assign io_out_bits_result = s3Pipe_rBits_result;	// scala/SFU.scala:101:25, :372:7
-  assign io_out_bits_throughout_op = s3Pipe_rBits_throughout_op;	// scala/SFU.scala:101:25, :372:7
-  assign io_out_bits_throughout_exp = s3Pipe_rBits_throughout_exp;	// scala/SFU.scala:101:25, :372:7
-  assign io_out_bits_throughout_bypass = s3Pipe_rBits_throughout_bypass;	// scala/SFU.scala:101:25, :372:7
-  assign io_out_bits_throughout_bypassVal = s3Pipe_rBits_throughout_bypassVal;	// scala/SFU.scala:101:25, :372:7
+  assign io_in_ready = s1_ready;	// scala/SFU.scala:111:43, :435:7
+  assign io_out_valid = s3Pipe_rValid;	// scala/SFU.scala:109:29, :435:7
+  assign io_out_bits_polyResult = s3Pipe_rBits_polyResult;	// scala/SFU.scala:110:25, :435:7
+  assign io_out_bits_sign = s3Pipe_rBits_sign;	// scala/SFU.scala:110:25, :435:7
+  assign io_out_bits_exp = s3Pipe_rBits_exp;	// scala/SFU.scala:110:25, :435:7
+  assign io_out_bits_op = s3Pipe_rBits_op;	// scala/SFU.scala:110:25, :435:7
+  assign io_out_bits_bypass = s3Pipe_rBits_bypass;	// scala/SFU.scala:110:25, :435:7
+  assign io_out_bits_bypassVal = s3Pipe_rBits_bypassVal;	// scala/SFU.scala:110:25, :435:7
 endmodule
 
-module Compose(	// scala/SFU.scala:462:7
-  input         clock,	// scala/SFU.scala:462:7
-                reset,	// scala/SFU.scala:462:7
-  output        io_in_ready,	// scala/SFU.scala:477:14
-  input         io_in_valid,	// scala/SFU.scala:477:14
-  input  [7:0]  io_in_bits_exp,	// scala/SFU.scala:477:14
-  input  [25:0] io_in_bits_polyResult,	// scala/SFU.scala:477:14
-  input         io_in_bits_bypass,	// scala/SFU.scala:477:14
-  input  [31:0] io_in_bits_bypassVal,	// scala/SFU.scala:477:14
-  input  [2:0]  io_in_bits_op,	// scala/SFU.scala:477:14
-  input         io_out_ready,	// scala/SFU.scala:477:14
-  output        io_out_valid,	// scala/SFU.scala:477:14
-  output [31:0] io_out_bits_result	// scala/SFU.scala:477:14
+module Compose(	// scala/SFU.scala:527:7
+  input         clock,	// scala/SFU.scala:527:7
+                reset,	// scala/SFU.scala:527:7
+  output        io_in_ready,	// scala/SFU.scala:528:14
+  input         io_in_valid,	// scala/SFU.scala:528:14
+  input  [26:0] io_in_bits_polyResult,	// scala/SFU.scala:528:14
+  input         io_in_bits_sign,	// scala/SFU.scala:528:14
+  input  [7:0]  io_in_bits_exp,	// scala/SFU.scala:528:14
+  input  [2:0]  io_in_bits_op,	// scala/SFU.scala:528:14
+  input         io_in_bits_bypass,	// scala/SFU.scala:528:14
+  input  [31:0] io_in_bits_bypassVal,	// scala/SFU.scala:528:14
+  input         io_out_ready,	// scala/SFU.scala:528:14
+  output        io_out_valid,	// scala/SFU.scala:528:14
+  output [31:0] io_out_bits_result	// scala/SFU.scala:528:14
 );
 
-  reg              s1Pipe_rValid;	// scala/SFU.scala:100:29
-  reg  [31:0]      s1Pipe_rBits_result;	// scala/SFU.scala:101:25
-  wire             s1_ready = ~s1Pipe_rValid | io_out_ready;	// scala/SFU.scala:100:29, :102:{35,43}
-  wire [33:0]      sum = {io_in_bits_exp, io_in_bits_polyResult};	// scala/SFU.scala:487:20
-  wire [33:0]      sumAbs = io_in_bits_exp[7] ? ~sum + 34'h1 : sum;	// scala/SFU.scala:486:20, :487:20, :488:{20,28,33}
+  reg              s1Pipe_rValid;	// scala/SFU.scala:109:29
+  reg  [31:0]      s1Pipe_rBits_result;	// scala/SFU.scala:110:25
+  wire             s1_ready = ~s1Pipe_rValid | io_out_ready;	// scala/SFU.scala:109:29, :111:{35,43}
+  wire [33:0]      sum = {io_in_bits_exp, io_in_bits_polyResult[25:0]};	// scala/SFU.scala:538:{20,43}
+  wire [33:0]      sumAbs = io_in_bits_exp[7] ? ~sum + 34'h1 : sum;	// scala/SFU.scala:538:20, :539:{20,24,30,35}
   wire [7:0]       _GEN =
     {{sumAbs[11:8], sumAbs[15:14]} & 6'h33, 2'h0} | {sumAbs[15:12], sumAbs[19:16]}
-    & 8'h33;	// scala/SFU.scala:462:7, :488:20, :489:40
+    & 8'h33;	// scala/SFU.scala:527:7, :539:20, :540:40
   wire [18:0]      _GEN_0 =
     {sumAbs[5:4],
      sumAbs[7:6],
@@ -2172,10 +2412,10 @@ module Compose(	// scala/SFU.scala:462:7
      _GEN,
      sumAbs[19:18],
      sumAbs[21:20],
-     sumAbs[23]} & 19'h55555;	// scala/SFU.scala:488:20, :489:40
-  wire [3:0]       _GEN_1 = _GEN_0[18:15] | {sumAbs[7:6], sumAbs[9:8]} & 4'h5;	// scala/SFU.scala:488:20, :489:40
-  wire [7:0]       _GEN_2 = _GEN_0[14:7] | _GEN & 8'h55;	// scala/SFU.scala:489:40
-  wire [3:0]       _GEN_3 = {_GEN_0[2:0], 1'h0} | {sumAbs[23:22], sumAbs[25:24]} & 4'h5;	// scala/SFU.scala:462:7, :488:20, :489:40
+     sumAbs[23]} & 19'h55555;	// scala/SFU.scala:539:20, :540:40
+  wire [3:0]       _GEN_1 = _GEN_0[18:15] | {sumAbs[7:6], sumAbs[9:8]} & 4'h5;	// scala/SFU.scala:539:20, :540:40
+  wire [7:0]       _GEN_2 = _GEN_0[14:7] | _GEN & 8'h55;	// scala/SFU.scala:540:40
+  wire [3:0]       _GEN_3 = {_GEN_0[2:0], 1'h0} | {sumAbs[23:22], sumAbs[25:24]} & 4'h5;	// scala/SFU.scala:527:7, :539:20, :540:40
   wire [5:0]       lzd =
     sumAbs[33]
       ? 6'h0
@@ -2242,192 +2482,201 @@ module Compose(	// scala/SFU.scala:462:7
                                                                                                                               : sumAbs[2]
                                                                                                                                   ? 6'h1F
                                                                                                                                   : {5'h10,
-                                                                                                                                     ~(sumAbs[1])};	// scala/SFU.scala:488:20, :489:40, src/main/scala/chisel3/util/Mux.scala:50:70, src/main/scala/chisel3/util/OneHot.scala:48:45
-  wire [7:0]       _GEN_4 = {io_in_bits_exp[7], io_in_bits_exp[7:1]};	// scala/SFU.scala:501:{25,32}
-  wire [96:0]      _mantLog2_T = {63'h0, sumAbs} << lzd;	// scala/SFU.scala:488:20, :493:26, src/main/scala/chisel3/util/Mux.scala:50:70
+                                                                                                                                     ~(sumAbs[1])};	// scala/SFU.scala:539:20, :540:40, src/main/scala/chisel3/util/Mux.scala:50:70, src/main/scala/chisel3/util/OneHot.scala:48:45
+  wire [7:0]       _expSin_T = 8'h86 - {2'h0, lzd};	// scala/SFU.scala:527:7, :543:30, src/main/scala/chisel3/util/Mux.scala:50:70
+  wire [96:0]      _mantSin_T = {63'h0, sumAbs} << lzd;	// scala/SFU.scala:539:20, :544:26, src/main/scala/chisel3/util/Mux.scala:50:70
+  wire [7:0]       _expSqrt_T = io_in_bits_exp + 8'h7F;	// scala/SFU.scala:549:25
+  wire [7:0]       _expRsqrt_T = 8'h7E - io_in_bits_exp;	// scala/SFU.scala:552:25
+  wire [30:0]      _GEN_4 =
+    io_in_bits_polyResult[26] ? 31'h3F800000 : {_expSin_T, _mantSin_T[32:10]};	// scala/SFU.scala:543:30, :544:26, :547:33, :567:{23,34,43,78}
   wire [7:0][31:0] _GEN_5 =
     {{32'h0},
-     {32'h0},
-     {32'h0},
-     {{1'h0, 8'h7E - _GEN_4, io_in_bits_polyResult[24:2]}},
-     {{1'h0, _GEN_4 + 8'h7F, io_in_bits_polyResult[24:2]}},
-     {{1'h0, 8'h7E - io_in_bits_exp, io_in_bits_polyResult[24:2]}},
-     {{io_in_bits_exp[7], 8'h86 - {2'h0, lzd}, _mantLog2_T[32:10]}},
-     {{1'h0, io_in_bits_exp + 8'h7F, io_in_bits_polyResult[24:2]}}};	// scala/SFU.scala:462:7, :486:20, :492:30, :493:{26,33}, :495:23, :496:28, :498:25, :501:25, :504:26, :507:52, :508:23, :509:23, :510:23, :511:23, :512:23, src/main/scala/chisel3/util/Mux.scala:50:70
-  wire             _s1Pipe_T = s1_ready & io_in_valid;	// scala/SFU.scala:102:43, src/main/scala/chisel3/util/Decoupled.scala:51:35
-  always @(posedge clock) begin	// scala/SFU.scala:462:7
-    if (reset)	// scala/SFU.scala:462:7
-      s1Pipe_rValid <= 1'h0;	// scala/SFU.scala:100:29, :462:7
-    else	// scala/SFU.scala:462:7
-      s1Pipe_rValid <= _s1Pipe_T | ~(io_out_ready & s1Pipe_rValid) & s1Pipe_rValid;	// scala/SFU.scala:100:29, :105:36, :107:18, :108:31, :109:18, src/main/scala/chisel3/util/Decoupled.scala:51:35
+     {{io_in_bits_sign, _GEN_4}},
+     {{io_in_bits_sign, _GEN_4}},
+     {{1'h0, _expRsqrt_T, io_in_bits_polyResult[24:2]}},
+     {{1'h0, _expSqrt_T, io_in_bits_polyResult[24:2]}},
+     {{io_in_bits_sign, _expRsqrt_T, io_in_bits_polyResult[24:2]}},
+     {{io_in_bits_exp[7], _expSin_T, _mantSin_T[32:10]}},
+     {{1'h0, _expSqrt_T, io_in_bits_polyResult[24:2]}}};	// scala/SFU.scala:527:7, :539:24, :543:30, :544:{26,33}, :549:25, :550:28, :552:25, :561:52, :562:23, :563:23, :564:23, :565:23, :566:23, :567:23, :568:23
+  wire             _s1Pipe_T = s1_ready & io_in_valid;	// scala/SFU.scala:111:43, src/main/scala/chisel3/util/Decoupled.scala:51:35
+  always @(posedge clock) begin	// scala/SFU.scala:527:7
+    if (reset)	// scala/SFU.scala:527:7
+      s1Pipe_rValid <= 1'h0;	// scala/SFU.scala:109:29, :527:7
+    else	// scala/SFU.scala:527:7
+      s1Pipe_rValid <= _s1Pipe_T | ~(io_out_ready & s1Pipe_rValid) & s1Pipe_rValid;	// scala/SFU.scala:109:29, :114:36, :116:18, :117:31, :118:18, src/main/scala/chisel3/util/Decoupled.scala:51:35
     if (_s1Pipe_T)	// src/main/scala/chisel3/util/Decoupled.scala:51:35
       s1Pipe_rBits_result <=
-        io_in_bits_bypass ? io_in_bits_bypassVal : _GEN_5[io_in_bits_op];	// scala/SFU.scala:101:25, :507:52, :519:28
+        io_in_bits_bypass ? io_in_bits_bypassVal : _GEN_5[io_in_bits_op];	// scala/SFU.scala:110:25, :561:52, :575:28
   end // always @(posedge)
-  `ifdef ENABLE_INITIAL_REG_	// scala/SFU.scala:462:7
-    `ifdef FIRRTL_BEFORE_INITIAL	// scala/SFU.scala:462:7
-      `FIRRTL_BEFORE_INITIAL	// scala/SFU.scala:462:7
+  `ifdef ENABLE_INITIAL_REG_	// scala/SFU.scala:527:7
+    `ifdef FIRRTL_BEFORE_INITIAL	// scala/SFU.scala:527:7
+      `FIRRTL_BEFORE_INITIAL	// scala/SFU.scala:527:7
     `endif // FIRRTL_BEFORE_INITIAL
-    logic [31:0] _RANDOM[0:1];	// scala/SFU.scala:462:7
-    initial begin	// scala/SFU.scala:462:7
-      `ifdef INIT_RANDOM_PROLOG_	// scala/SFU.scala:462:7
-        `INIT_RANDOM_PROLOG_	// scala/SFU.scala:462:7
+    logic [31:0] _RANDOM[0:1];	// scala/SFU.scala:527:7
+    initial begin	// scala/SFU.scala:527:7
+      `ifdef INIT_RANDOM_PROLOG_	// scala/SFU.scala:527:7
+        `INIT_RANDOM_PROLOG_	// scala/SFU.scala:527:7
       `endif // INIT_RANDOM_PROLOG_
-      `ifdef RANDOMIZE_REG_INIT	// scala/SFU.scala:462:7
+      `ifdef RANDOMIZE_REG_INIT	// scala/SFU.scala:527:7
         for (logic [1:0] i = 2'h0; i < 2'h2; i += 2'h1) begin
-          _RANDOM[i[0]] = `RANDOM;	// scala/SFU.scala:462:7
-        end	// scala/SFU.scala:462:7
-        s1Pipe_rValid = _RANDOM[1'h0][0];	// scala/SFU.scala:100:29, :462:7
-        s1Pipe_rBits_result = {_RANDOM[1'h0][31:1], _RANDOM[1'h1][0]};	// scala/SFU.scala:100:29, :101:25, :462:7
+          _RANDOM[i[0]] = `RANDOM;	// scala/SFU.scala:527:7
+        end	// scala/SFU.scala:527:7
+        s1Pipe_rValid = _RANDOM[1'h0][0];	// scala/SFU.scala:109:29, :527:7
+        s1Pipe_rBits_result = {_RANDOM[1'h0][31:1], _RANDOM[1'h1][0]};	// scala/SFU.scala:109:29, :110:25, :527:7
       `endif // RANDOMIZE_REG_INIT
     end // initial
-    `ifdef FIRRTL_AFTER_INITIAL	// scala/SFU.scala:462:7
-      `FIRRTL_AFTER_INITIAL	// scala/SFU.scala:462:7
+    `ifdef FIRRTL_AFTER_INITIAL	// scala/SFU.scala:527:7
+      `FIRRTL_AFTER_INITIAL	// scala/SFU.scala:527:7
     `endif // FIRRTL_AFTER_INITIAL
   `endif // ENABLE_INITIAL_REG_
-  assign io_in_ready = s1_ready;	// scala/SFU.scala:102:43, :462:7
-  assign io_out_valid = s1Pipe_rValid;	// scala/SFU.scala:100:29, :462:7
-  assign io_out_bits_result = s1Pipe_rBits_result;	// scala/SFU.scala:101:25, :462:7
+  assign io_in_ready = s1_ready;	// scala/SFU.scala:111:43, :527:7
+  assign io_out_valid = s1Pipe_rValid;	// scala/SFU.scala:109:29, :527:7
+  assign io_out_bits_result = s1Pipe_rBits_result;	// scala/SFU.scala:110:25, :527:7
 endmodule
 
-module SFU(	// scala/SFU.scala:525:7
-  input         clock,	// scala/SFU.scala:525:7
-                reset,	// scala/SFU.scala:525:7
-  output        io_in_ready,	// scala/SFU.scala:533:14
-  input         io_in_valid,	// scala/SFU.scala:533:14
-  input  [31:0] io_in_bits_x,	// scala/SFU.scala:533:14
-  input  [2:0]  io_in_bits_op,	// scala/SFU.scala:533:14
-  input         io_out_ready,	// scala/SFU.scala:533:14
-  output        io_out_valid,	// scala/SFU.scala:533:14
-  output [31:0] io_out_bits_result	// scala/SFU.scala:533:14
+module SFU(	// scala/SFU.scala:580:7
+  input         clock,	// scala/SFU.scala:580:7
+                reset,	// scala/SFU.scala:580:7
+  output        io_in_ready,	// scala/SFU.scala:581:14
+  input         io_in_valid,	// scala/SFU.scala:581:14
+  input  [31:0] io_in_bits_x,	// scala/SFU.scala:581:14
+  input  [2:0]  io_in_bits_op,	// scala/SFU.scala:581:14
+  input         io_out_ready,	// scala/SFU.scala:581:14
+  output        io_out_valid,	// scala/SFU.scala:581:14
+  output [31:0] io_out_bits_result	// scala/SFU.scala:581:14
 );
 
-  wire        _compose_io_in_ready;	// scala/SFU.scala:610:23
-  wire        _poly_io_in_ready;	// scala/SFU.scala:596:20
-  wire        _poly_io_out_valid;	// scala/SFU.scala:596:20
-  wire [25:0] _poly_io_out_bits_result;	// scala/SFU.scala:596:20
-  wire [2:0]  _poly_io_out_bits_throughout_op;	// scala/SFU.scala:596:20
-  wire [7:0]  _poly_io_out_bits_throughout_exp;	// scala/SFU.scala:596:20
-  wire        _poly_io_out_bits_throughout_bypass;	// scala/SFU.scala:596:20
-  wire [31:0] _poly_io_out_bits_throughout_bypassVal;	// scala/SFU.scala:596:20
-  wire        _lut_io_in_ready;	// scala/SFU.scala:577:19
-  wire        _lut_io_out_valid;	// scala/SFU.scala:577:19
-  wire [26:0] _lut_io_out_bits_c0;	// scala/SFU.scala:577:19
-  wire [16:0] _lut_io_out_bits_c1;	// scala/SFU.scala:577:19
-  wire [12:0] _lut_io_out_bits_c2;	// scala/SFU.scala:577:19
-  wire [2:0]  _lut_io_out_bits_throughout_op;	// scala/SFU.scala:577:19
-  wire [16:0] _lut_io_out_bits_throughout_xl;	// scala/SFU.scala:577:19
-  wire [7:0]  _lut_io_out_bits_throughout_exp;	// scala/SFU.scala:577:19
-  wire        _lut_io_out_bits_throughout_bypass;	// scala/SFU.scala:577:19
-  wire [31:0] _lut_io_out_bits_throughout_bypassVal;	// scala/SFU.scala:577:19
-  wire        _rangeReduce_io_in_ready;	// scala/SFU.scala:557:27
-  wire        _rangeReduce_io_out_valid;	// scala/SFU.scala:557:27
-  wire [6:0]  _rangeReduce_io_out_bits_index;	// scala/SFU.scala:557:27
-  wire [16:0] _rangeReduce_io_out_bits_xl;	// scala/SFU.scala:557:27
-  wire [7:0]  _rangeReduce_io_out_bits_exp;	// scala/SFU.scala:557:27
-  wire [2:0]  _rangeReduce_io_out_bits_throughout_op;	// scala/SFU.scala:557:27
-  wire        _rangeReduce_io_out_bits_throughout_bypass;	// scala/SFU.scala:557:27
-  wire [31:0] _rangeReduce_io_out_bits_throughout_bypassVal;	// scala/SFU.scala:557:27
-  wire        _filter_io_out_valid;	// scala/SFU.scala:543:22
-  wire        _filter_io_out_bits_sign;	// scala/SFU.scala:543:22
-  wire [7:0]  _filter_io_out_bits_exponent;	// scala/SFU.scala:543:22
-  wire [22:0] _filter_io_out_bits_mantissa;	// scala/SFU.scala:543:22
-  wire        _filter_io_out_bits_bypass;	// scala/SFU.scala:543:22
-  wire [31:0] _filter_io_out_bits_bypassVal;	// scala/SFU.scala:543:22
-  wire [2:0]  _filter_io_out_bits_throughout_op;	// scala/SFU.scala:543:22
-  Filter filter (	// scala/SFU.scala:543:22
-    .clock                     (clock),
-    .reset                     (reset),
-    .io_in_ready               (io_in_ready),
-    .io_in_valid               (io_in_valid),
-    .io_in_bits_x              (io_in_bits_x),
-    .io_in_bits_op             (io_in_bits_op),
-    .io_in_bits_throughout_op  (io_in_bits_op),
-    .io_out_ready              (_rangeReduce_io_in_ready),	// scala/SFU.scala:557:27
-    .io_out_valid              (_filter_io_out_valid),
-    .io_out_bits_sign          (_filter_io_out_bits_sign),
-    .io_out_bits_exponent      (_filter_io_out_bits_exponent),
-    .io_out_bits_mantissa      (_filter_io_out_bits_mantissa),
-    .io_out_bits_bypass        (_filter_io_out_bits_bypass),
-    .io_out_bits_bypassVal     (_filter_io_out_bits_bypassVal),
-    .io_out_bits_throughout_op (_filter_io_out_bits_throughout_op)
+  wire        _compose_io_in_ready;	// scala/SFU.scala:605:23
+  wire        _poly_io_in_ready;	// scala/SFU.scala:601:20
+  wire        _poly_io_out_valid;	// scala/SFU.scala:601:20
+  wire [26:0] _poly_io_out_bits_polyResult;	// scala/SFU.scala:601:20
+  wire        _poly_io_out_bits_sign;	// scala/SFU.scala:601:20
+  wire [7:0]  _poly_io_out_bits_exp;	// scala/SFU.scala:601:20
+  wire [2:0]  _poly_io_out_bits_op;	// scala/SFU.scala:601:20
+  wire        _poly_io_out_bits_bypass;	// scala/SFU.scala:601:20
+  wire [31:0] _poly_io_out_bits_bypassVal;	// scala/SFU.scala:601:20
+  wire        _lut_io_in_ready;	// scala/SFU.scala:597:19
+  wire        _lut_io_out_valid;	// scala/SFU.scala:597:19
+  wire [26:0] _lut_io_out_bits_c0;	// scala/SFU.scala:597:19
+  wire [16:0] _lut_io_out_bits_c1;	// scala/SFU.scala:597:19
+  wire [12:0] _lut_io_out_bits_c2;	// scala/SFU.scala:597:19
+  wire [16:0] _lut_io_out_bits_xl;	// scala/SFU.scala:597:19
+  wire        _lut_io_out_bits_sign;	// scala/SFU.scala:597:19
+  wire [7:0]  _lut_io_out_bits_exp;	// scala/SFU.scala:597:19
+  wire [2:0]  _lut_io_out_bits_op;	// scala/SFU.scala:597:19
+  wire        _lut_io_out_bits_bypass;	// scala/SFU.scala:597:19
+  wire [31:0] _lut_io_out_bits_bypassVal;	// scala/SFU.scala:597:19
+  wire        _rangeReduce_io_in_ready;	// scala/SFU.scala:593:27
+  wire        _rangeReduce_io_out_valid;	// scala/SFU.scala:593:27
+  wire [6:0]  _rangeReduce_io_out_bits_index;	// scala/SFU.scala:593:27
+  wire [16:0] _rangeReduce_io_out_bits_xl;	// scala/SFU.scala:593:27
+  wire        _rangeReduce_io_out_bits_sign;	// scala/SFU.scala:593:27
+  wire [7:0]  _rangeReduce_io_out_bits_exp;	// scala/SFU.scala:593:27
+  wire [2:0]  _rangeReduce_io_out_bits_op;	// scala/SFU.scala:593:27
+  wire        _rangeReduce_io_out_bits_bypass;	// scala/SFU.scala:593:27
+  wire [31:0] _rangeReduce_io_out_bits_bypassVal;	// scala/SFU.scala:593:27
+  wire        _filter_io_out_valid;	// scala/SFU.scala:587:22
+  wire        _filter_io_out_bits_sign;	// scala/SFU.scala:587:22
+  wire [7:0]  _filter_io_out_bits_exponent;	// scala/SFU.scala:587:22
+  wire [22:0] _filter_io_out_bits_mantissa;	// scala/SFU.scala:587:22
+  wire [2:0]  _filter_io_out_bits_op;	// scala/SFU.scala:587:22
+  wire        _filter_io_out_bits_bypass;	// scala/SFU.scala:587:22
+  wire [31:0] _filter_io_out_bits_bypassVal;	// scala/SFU.scala:587:22
+  Filter filter (	// scala/SFU.scala:587:22
+    .clock                 (clock),
+    .reset                 (reset),
+    .io_in_ready           (io_in_ready),
+    .io_in_valid           (io_in_valid),
+    .io_in_bits_x          (io_in_bits_x),
+    .io_in_bits_op         (io_in_bits_op),
+    .io_out_ready          (_rangeReduce_io_in_ready),	// scala/SFU.scala:593:27
+    .io_out_valid          (_filter_io_out_valid),
+    .io_out_bits_sign      (_filter_io_out_bits_sign),
+    .io_out_bits_exponent  (_filter_io_out_bits_exponent),
+    .io_out_bits_mantissa  (_filter_io_out_bits_mantissa),
+    .io_out_bits_op        (_filter_io_out_bits_op),
+    .io_out_bits_bypass    (_filter_io_out_bits_bypass),
+    .io_out_bits_bypassVal (_filter_io_out_bits_bypassVal)
   );
-  RangeReduce rangeReduce (	// scala/SFU.scala:557:27
-    .clock                            (clock),
-    .reset                            (reset),
-    .io_in_ready                      (_rangeReduce_io_in_ready),
-    .io_in_valid                      (_filter_io_out_valid),	// scala/SFU.scala:543:22
-    .io_in_bits_sign                  (_filter_io_out_bits_sign),	// scala/SFU.scala:543:22
-    .io_in_bits_exponent              (_filter_io_out_bits_exponent),	// scala/SFU.scala:543:22
-    .io_in_bits_mantissa              (_filter_io_out_bits_mantissa),	// scala/SFU.scala:543:22
-    .io_in_bits_op                    (_filter_io_out_bits_throughout_op),	// scala/SFU.scala:543:22
-    .io_in_bits_throughout_op         (_filter_io_out_bits_throughout_op),	// scala/SFU.scala:543:22
-    .io_in_bits_throughout_bypass     (_filter_io_out_bits_bypass),	// scala/SFU.scala:543:22
-    .io_in_bits_throughout_bypassVal  (_filter_io_out_bits_bypassVal),	// scala/SFU.scala:543:22
-    .io_out_ready                     (_lut_io_in_ready),	// scala/SFU.scala:577:19
-    .io_out_valid                     (_rangeReduce_io_out_valid),
-    .io_out_bits_index                (_rangeReduce_io_out_bits_index),
-    .io_out_bits_xl                   (_rangeReduce_io_out_bits_xl),
-    .io_out_bits_exp                  (_rangeReduce_io_out_bits_exp),
-    .io_out_bits_throughout_op        (_rangeReduce_io_out_bits_throughout_op),
-    .io_out_bits_throughout_bypass    (_rangeReduce_io_out_bits_throughout_bypass),
-    .io_out_bits_throughout_bypassVal (_rangeReduce_io_out_bits_throughout_bypassVal)
+  RangeReduce rangeReduce (	// scala/SFU.scala:593:27
+    .clock                 (clock),
+    .reset                 (reset),
+    .io_in_ready           (_rangeReduce_io_in_ready),
+    .io_in_valid           (_filter_io_out_valid),	// scala/SFU.scala:587:22
+    .io_in_bits_sign       (_filter_io_out_bits_sign),	// scala/SFU.scala:587:22
+    .io_in_bits_exponent   (_filter_io_out_bits_exponent),	// scala/SFU.scala:587:22
+    .io_in_bits_mantissa   (_filter_io_out_bits_mantissa),	// scala/SFU.scala:587:22
+    .io_in_bits_op         (_filter_io_out_bits_op),	// scala/SFU.scala:587:22
+    .io_in_bits_bypass     (_filter_io_out_bits_bypass),	// scala/SFU.scala:587:22
+    .io_in_bits_bypassVal  (_filter_io_out_bits_bypassVal),	// scala/SFU.scala:587:22
+    .io_out_ready          (_lut_io_in_ready),	// scala/SFU.scala:597:19
+    .io_out_valid          (_rangeReduce_io_out_valid),
+    .io_out_bits_index     (_rangeReduce_io_out_bits_index),
+    .io_out_bits_xl        (_rangeReduce_io_out_bits_xl),
+    .io_out_bits_sign      (_rangeReduce_io_out_bits_sign),
+    .io_out_bits_exp       (_rangeReduce_io_out_bits_exp),
+    .io_out_bits_op        (_rangeReduce_io_out_bits_op),
+    .io_out_bits_bypass    (_rangeReduce_io_out_bits_bypass),
+    .io_out_bits_bypassVal (_rangeReduce_io_out_bits_bypassVal)
   );
-  LookupTable lut (	// scala/SFU.scala:577:19
-    .clock                            (clock),
-    .reset                            (reset),
-    .io_in_ready                      (_lut_io_in_ready),
-    .io_in_valid                      (_rangeReduce_io_out_valid),	// scala/SFU.scala:557:27
-    .io_in_bits_op                    (_rangeReduce_io_out_bits_throughout_op),	// scala/SFU.scala:557:27
-    .io_in_bits_index                 (_rangeReduce_io_out_bits_index),	// scala/SFU.scala:557:27
-    .io_in_bits_throughout_op         (_rangeReduce_io_out_bits_throughout_op),	// scala/SFU.scala:557:27
-    .io_in_bits_throughout_xl         (_rangeReduce_io_out_bits_xl),	// scala/SFU.scala:557:27
-    .io_in_bits_throughout_exp        (_rangeReduce_io_out_bits_exp),	// scala/SFU.scala:557:27
-    .io_in_bits_throughout_bypass     (_rangeReduce_io_out_bits_throughout_bypass),	// scala/SFU.scala:557:27
-    .io_in_bits_throughout_bypassVal  (_rangeReduce_io_out_bits_throughout_bypassVal),	// scala/SFU.scala:557:27
-    .io_out_ready                     (_poly_io_in_ready),	// scala/SFU.scala:596:20
-    .io_out_valid                     (_lut_io_out_valid),
-    .io_out_bits_c0                   (_lut_io_out_bits_c0),
-    .io_out_bits_c1                   (_lut_io_out_bits_c1),
-    .io_out_bits_c2                   (_lut_io_out_bits_c2),
-    .io_out_bits_throughout_op        (_lut_io_out_bits_throughout_op),
-    .io_out_bits_throughout_xl        (_lut_io_out_bits_throughout_xl),
-    .io_out_bits_throughout_exp       (_lut_io_out_bits_throughout_exp),
-    .io_out_bits_throughout_bypass    (_lut_io_out_bits_throughout_bypass),
-    .io_out_bits_throughout_bypassVal (_lut_io_out_bits_throughout_bypassVal)
+  LookupTable lut (	// scala/SFU.scala:597:19
+    .clock                 (clock),
+    .reset                 (reset),
+    .io_in_ready           (_lut_io_in_ready),
+    .io_in_valid           (_rangeReduce_io_out_valid),	// scala/SFU.scala:593:27
+    .io_in_bits_index      (_rangeReduce_io_out_bits_index),	// scala/SFU.scala:593:27
+    .io_in_bits_xl         (_rangeReduce_io_out_bits_xl),	// scala/SFU.scala:593:27
+    .io_in_bits_sign       (_rangeReduce_io_out_bits_sign),	// scala/SFU.scala:593:27
+    .io_in_bits_exp        (_rangeReduce_io_out_bits_exp),	// scala/SFU.scala:593:27
+    .io_in_bits_op         (_rangeReduce_io_out_bits_op),	// scala/SFU.scala:593:27
+    .io_in_bits_bypass     (_rangeReduce_io_out_bits_bypass),	// scala/SFU.scala:593:27
+    .io_in_bits_bypassVal  (_rangeReduce_io_out_bits_bypassVal),	// scala/SFU.scala:593:27
+    .io_out_ready          (_poly_io_in_ready),	// scala/SFU.scala:601:20
+    .io_out_valid          (_lut_io_out_valid),
+    .io_out_bits_c0        (_lut_io_out_bits_c0),
+    .io_out_bits_c1        (_lut_io_out_bits_c1),
+    .io_out_bits_c2        (_lut_io_out_bits_c2),
+    .io_out_bits_xl        (_lut_io_out_bits_xl),
+    .io_out_bits_sign      (_lut_io_out_bits_sign),
+    .io_out_bits_exp       (_lut_io_out_bits_exp),
+    .io_out_bits_op        (_lut_io_out_bits_op),
+    .io_out_bits_bypass    (_lut_io_out_bits_bypass),
+    .io_out_bits_bypassVal (_lut_io_out_bits_bypassVal)
   );
-  Poly poly (	// scala/SFU.scala:596:20
-    .clock                            (clock),
-    .reset                            (reset),
-    .io_in_ready                      (_poly_io_in_ready),
-    .io_in_valid                      (_lut_io_out_valid),	// scala/SFU.scala:577:19
-    .io_in_bits_c0                    (_lut_io_out_bits_c0),	// scala/SFU.scala:577:19
-    .io_in_bits_c1                    (_lut_io_out_bits_c1),	// scala/SFU.scala:577:19
-    .io_in_bits_c2                    (_lut_io_out_bits_c2),	// scala/SFU.scala:577:19
-    .io_in_bits_xl                    (_lut_io_out_bits_throughout_xl),	// scala/SFU.scala:577:19
-    .io_in_bits_op                    (_lut_io_out_bits_throughout_op),	// scala/SFU.scala:577:19
-    .io_in_bits_throughout_op         (_lut_io_out_bits_throughout_op),	// scala/SFU.scala:577:19
-    .io_in_bits_throughout_exp        (_lut_io_out_bits_throughout_exp),	// scala/SFU.scala:577:19
-    .io_in_bits_throughout_bypass     (_lut_io_out_bits_throughout_bypass),	// scala/SFU.scala:577:19
-    .io_in_bits_throughout_bypassVal  (_lut_io_out_bits_throughout_bypassVal),	// scala/SFU.scala:577:19
-    .io_out_ready                     (_compose_io_in_ready),	// scala/SFU.scala:610:23
-    .io_out_valid                     (_poly_io_out_valid),
-    .io_out_bits_result               (_poly_io_out_bits_result),
-    .io_out_bits_throughout_op        (_poly_io_out_bits_throughout_op),
-    .io_out_bits_throughout_exp       (_poly_io_out_bits_throughout_exp),
-    .io_out_bits_throughout_bypass    (_poly_io_out_bits_throughout_bypass),
-    .io_out_bits_throughout_bypassVal (_poly_io_out_bits_throughout_bypassVal)
+  Poly poly (	// scala/SFU.scala:601:20
+    .clock                  (clock),
+    .reset                  (reset),
+    .io_in_ready            (_poly_io_in_ready),
+    .io_in_valid            (_lut_io_out_valid),	// scala/SFU.scala:597:19
+    .io_in_bits_c0          (_lut_io_out_bits_c0),	// scala/SFU.scala:597:19
+    .io_in_bits_c1          (_lut_io_out_bits_c1),	// scala/SFU.scala:597:19
+    .io_in_bits_c2          (_lut_io_out_bits_c2),	// scala/SFU.scala:597:19
+    .io_in_bits_xl          (_lut_io_out_bits_xl),	// scala/SFU.scala:597:19
+    .io_in_bits_sign        (_lut_io_out_bits_sign),	// scala/SFU.scala:597:19
+    .io_in_bits_exp         (_lut_io_out_bits_exp),	// scala/SFU.scala:597:19
+    .io_in_bits_op          (_lut_io_out_bits_op),	// scala/SFU.scala:597:19
+    .io_in_bits_bypass      (_lut_io_out_bits_bypass),	// scala/SFU.scala:597:19
+    .io_in_bits_bypassVal   (_lut_io_out_bits_bypassVal),	// scala/SFU.scala:597:19
+    .io_out_ready           (_compose_io_in_ready),	// scala/SFU.scala:605:23
+    .io_out_valid           (_poly_io_out_valid),
+    .io_out_bits_polyResult (_poly_io_out_bits_polyResult),
+    .io_out_bits_sign       (_poly_io_out_bits_sign),
+    .io_out_bits_exp        (_poly_io_out_bits_exp),
+    .io_out_bits_op         (_poly_io_out_bits_op),
+    .io_out_bits_bypass     (_poly_io_out_bits_bypass),
+    .io_out_bits_bypassVal  (_poly_io_out_bits_bypassVal)
   );
-  Compose compose (	// scala/SFU.scala:610:23
+  Compose compose (	// scala/SFU.scala:605:23
     .clock                 (clock),
     .reset                 (reset),
     .io_in_ready           (_compose_io_in_ready),
-    .io_in_valid           (_poly_io_out_valid),	// scala/SFU.scala:596:20
-    .io_in_bits_exp        (_poly_io_out_bits_throughout_exp),	// scala/SFU.scala:596:20
-    .io_in_bits_polyResult (_poly_io_out_bits_result),	// scala/SFU.scala:596:20
-    .io_in_bits_bypass     (_poly_io_out_bits_throughout_bypass),	// scala/SFU.scala:596:20
-    .io_in_bits_bypassVal  (_poly_io_out_bits_throughout_bypassVal),	// scala/SFU.scala:596:20
-    .io_in_bits_op         (_poly_io_out_bits_throughout_op),	// scala/SFU.scala:596:20
+    .io_in_valid           (_poly_io_out_valid),	// scala/SFU.scala:601:20
+    .io_in_bits_polyResult (_poly_io_out_bits_polyResult),	// scala/SFU.scala:601:20
+    .io_in_bits_sign       (_poly_io_out_bits_sign),	// scala/SFU.scala:601:20
+    .io_in_bits_exp        (_poly_io_out_bits_exp),	// scala/SFU.scala:601:20
+    .io_in_bits_op         (_poly_io_out_bits_op),	// scala/SFU.scala:601:20
+    .io_in_bits_bypass     (_poly_io_out_bits_bypass),	// scala/SFU.scala:601:20
+    .io_in_bits_bypassVal  (_poly_io_out_bits_bypassVal),	// scala/SFU.scala:601:20
     .io_out_ready          (io_out_ready),
     .io_out_valid          (io_out_valid),
     .io_out_bits_result    (io_out_bits_result)

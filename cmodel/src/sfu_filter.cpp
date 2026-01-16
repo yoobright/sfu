@@ -30,10 +30,10 @@ FilterOutput SFUFilter::filter(uint32_t input_bits, SFUOp op) {
       out.bypass_val = 0x3F800000;
     } else {
       int8_t exp_signed = exp - 127;
-      if (sign && exp_signed > 7) {
+      if (sign && exp_signed >= 7) {
         out.bypass = true;
         out.bypass_val = 0x00000000;
-      } else if (!sign && exp_signed > 7) {
+      } else if (!sign && exp_signed >= 7) {
         out.bypass = true;
         out.bypass_val = 0x7F800000;
       }
@@ -83,6 +83,24 @@ FilterOutput SFUFilter::filter(uint32_t input_bits, SFUOp op) {
     } else if (is_inf) {
       out.bypass = true;
       out.bypass_val = 0x00000000;
+    }
+    break;
+  case SFUOp::SIN:
+    if (is_inf) {
+      out.bypass = true;
+      out.bypass_val = 0x7FFFFFFF;
+    } else if (is_zero) {
+      out.bypass = true;
+      out.bypass_val = input_bits;
+    }
+    break;
+  case SFUOp::COS:
+    if (is_inf) {
+      out.bypass = true;
+      out.bypass_val = 0x7FFFFFFF;
+    } else if (is_zero) {
+      out.bypass = true;
+      out.bypass_val = 0x3F800000;
     }
     break;
   }

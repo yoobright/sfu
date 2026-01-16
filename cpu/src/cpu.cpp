@@ -13,6 +13,10 @@ float CPU::compute(float input, SFUOp op) {
     return sqrtf(input);
   case SFUOp::RSQRT:
     return 1.0f / sqrtf(input);
+  case SFUOp::SIN:
+    return sinf(input);
+  case SFUOp::COS:
+    return cosf(input);
   default:
     return 0.0f;
   }

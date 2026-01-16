@@ -25,6 +25,7 @@ private:
   static std::vector<LUTEntry> sqrt_odd_lut;
   static std::vector<LUTEntry> rsqrt_even_lut;
   static std::vector<LUTEntry> rsqrt_odd_lut;
+  static std::vector<LUTEntry> sin_lut;
 };
 
 #endif
