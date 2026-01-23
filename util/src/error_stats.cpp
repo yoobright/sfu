@@ -49,7 +49,7 @@ ErrorStats ErrorComputer::compute_stats(const float *golden, const float *test,
 }
 
 void ErrorComputer::print_stats(const char *name, const ErrorStats &stats) {
-  printf("=== %s Statistics ===\n", name);
+  printf("--- %s Statistics ---\n", name);
   printf("Total: %zu, Pass: %zu (%.2f%%), Fail: %zu (%.2f%%)\n", stats.total,
          stats.pass_count, 100.0 * stats.pass_count / stats.total,
          stats.fail_count, 100.0 * stats.fail_count / stats.total);

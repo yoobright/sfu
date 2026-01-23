@@ -5,3 +5,5 @@
 **/*.json
 **/.cache/
 **/result/
+**/cache/
+**/output/

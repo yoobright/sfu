@@ -4,7 +4,7 @@ import re
 text = sys.stdin.read()
 
 block_re = re.compile(
-    r"=== Testing (\w+)\s+\(DUT:\s*([^,]+),\s*REF:\s*([^)]+)\) ==="
+    r"--- Testing (\w+)\s+\(DUT:\s*([^,]+),\s*REF:\s*([^)]+)\)---"
     r".*?"
     r"AvgAbsErr:\s*([0-9.eE+-]+),\s*MaxAbsErr:\s*([0-9.eE+-]+)\n"
     r"AvgRelErr:\s*([0-9.eE+-]+),\s*MaxRelErr:\s*([0-9.eE+-]+)\n"
