@@ -4,232 +4,221 @@ A high-performance hardware implementation of special mathematical functions for
 
 ## Overview
 
-This project implements a unified **Special Function Unit (SFU)** that supports multiple FP32 functions using a shared pipelined architecture combining lookup tables (LUT) and polynomial approximation:
+This project implements a unified **Special Function Unit (SFU)** that supports seven FP32 functions using a shared pipelined architecture based on fixed-point quadratic interpolation with lookup tables (LUT):
 
 - **EXP2**: Base-2 exponential $2^x$
 - **LOG2**: Base-2 logarithm $\log_2(x)$
 - **RCP**: Reciprocal $1/x$
 - **SQRT**: Square root $\sqrt{x}$
 - **RSQRT**: Reciprocal square root $1/\sqrt{x}$
+- **SIN**: $\sin\!\left(\frac{\pi}{2} x\right)$
+- **COS**: $\cos\!\left(\frac{\pi}{2} x\right)$
 
-This project reuses the **XiangShan Fudian** floating-point unit library for basic FP32 arithmetic operations (multiplication, fused multiply-add).
+The architecture is based on the multifunction interpolation approach described by Oberman and Siu \[1\], which is consistent with the design used in NVIDIA SFUs.
+
+This project reuses the **XiangShan Fudian** floating-point unit library for basic FP32 arithmetic operations.
 
 ## Algorithm
+
+Each function is approximated by a **quadratic polynomial** over a set of small sub-intervals. Given an input $x$:
 
 $$
 \begin{equation}
 \begin{aligned}
-f                    &= \text{function}(x) \\
+x        &= 2^{E} \times (1 + M), \quad M = M_{high} + M_{low} \\
 \\
-x                    &= 2^{E} \times (1 + M) \\
+\text{index} &= M_{high} \quad \text{(high bits of mantissa, 6–7 bits)} \\
 \\
-M                    &= M_{high} + M_{low} \\
+x_l      &= M_{low} \quad \text{(low bits of mantissa, fixed-point)} \\
 \\
-\text{Value}_1       &= \text{LUT}[M_{high}] \\
-\\
-T                    &= \frac{1}{1 + M_{high}} = \text{LUT}[M_{high}] \\
-\\
-r                    &= M_{low} \times T \\
-\\
-\text{poly}(r)       &= c_1 \cdot r + c_2 \cdot r^2 \\
-                     &= r(c_1 + c_2 \cdot r) \\
-\\
-f(x)                 &= \text{Scale}(E) \times \text{Value}_1 \times (1 + \text{poly}(r))
+f(x)     &\approx c_0 + c_1 \cdot x_l + c_2 \cdot x_l^2
 \end{aligned}
 \end{equation}
 $$
 
-### Algorithm Breakdown
+The three coefficients $(c_0, c_1, c_2)$ are stored per interval in a LUT and optimized offline to minimize the maximum approximation error (minimax optimization). All arithmetic in the polynomial evaluation is performed in **fixed-point integer arithmetic**, avoiding floating-point operations in the critical path.
 
-- **Input Decomposition**: Split input $x$ into exponent $E$ and mantissa $M$ (or integer and fractional parts for EXP2)
-- **Table Lookup**: Use mantissa high bits $M_{high}$ (7 bits) to index LUT for $\text{Value}_1$ and normalization factor $T$
-- **Normalized Residual**: Compute $r = M_{low} \times T$, where $r \in [0, \frac{1}{2^{8}}]$
-- **Polynomial Approximation**: Second-order Taylor approximation $\text{poly}(r) = r(c_1 + c_2 \cdot r)$
-- **Result Composition**: $\text{Scale}(E)$ handles exponent part, $\text{Value}_1$ is table value, $\text{poly}(r)$ provides polynomial correction
+For **EXP2**, the argument is decomposed as $x = I + F$ where $I = \lfloor x \rfloor$ is the integer part and $F$ is the fractional part. The polynomial approximates $2^F$ over $[0, 1)$, and the exponent $I$ is applied in the compose stage.
+
+For **SIN/COS**, the functions computed are $\sin(\frac{\pi}{2} x)$ and $\cos(\frac{\pi}{2} x)$. The period is 4, so `quadrant = floor(x) mod 4` is read from the two low bits of the integer part of $x$. The LUT stores coefficients for $\sin(\frac{\pi}{2} t)$ over $t \in [0, 1)$ with 64 sub-intervals. The fractional part $f \in [0, 1)$ is mapped to the LUT argument $t$ using:
+
+$$
+t = \begin{cases} f & \text{if } \text{quadrant}[0] = 0 \\ 1 - f & \text{if } \text{quadrant}[0] = 1 \end{cases}
+$$
+
+exploiting the identity $\sin\!\left(\frac{\pi}{2}(1+f)\right) = \cos\!\left(\frac{\pi}{2}f\right) = \sin\!\left(\frac{\pi}{2}(1-f)\right)$. For COS, the mapping is inverted ($t = 1-f$ when `quadrant[0] = 0`). The output sign is `input_sign XOR quadrant[1]` for SIN, and `quadrant[1] XOR quadrant[0]` for COS. Both functions share one coefficient table.
+
+The final result is assembled by combining the polynomial output with the input exponent according to each function's composition rule.
 
 ## Hardware Design
 
 ### Pipeline Structure
 
 ```
-S0: Input Filtering and Special Value Handling (FilterFP32)
-    - Handle NaN, ±Inf, ±0, negative numbers (for specific functions)
-    - Handle out-of-range inputs (EXP2 overflow/underflow, etc.)
-    - Output bypass flag and bypass value
+S0: Filter (1 cycle)
+    - Handle special values: NaN, ±Inf, ±0, subnormals (treated as zero)
+    - Handle out-of-range inputs for EXP2 (overflow/underflow)
+    - Handle negative inputs for LOG2, SQRT, RSQRT
+    - Output bypass flag and bypass value for special cases
     - Pass normal inputs to next stage
 
-S1: Input Decomposition (DecomposeFP32)
-    - Floating-point functions: Extract exponent E and mantissa M = M_high + M_low
-    - EXP2: Separate integer I = floor(x) and fractional F = x - I
-    - M_high / F_high used as LUT index (7 bits)
-    - M_low / F_low converted to FP32 format
+S1: RangeReduce (1 cycle)
+    - EXP2/SIN/COS: Compute integer and fractional decomposition
+    - SIN/COS: quadrant = floor(x) mod 4; map fractional part f to t = f or 1-f based on quadrant[0]; sign from quadrant[1]
+    - LOG2/RCP/SQRT/RSQRT: Extract exponent and split mantissa into index + xl
+    - SQRT/RSQRT: index[6] = E mod 2 (selects even/odd LUT)
+    - Output: index (7 bits), xl (17 bits), exp (8 bits signed), sign (1 bit)
 
-S2: Lookup Table (LUT)
-    - Index: M_high or F_high (7 bits, 128 entries)
-    - Output Value1: Primary function value (log₂(1+M_high), √(1+M_high), etc.)
-    - Output Value2: Normalization factor T = 1/(1+M_high)
-    - SQRT/RSQRT select table entries based on E mod 2
+S2: LUT (1 cycle)
+    - Index: 7 bits → 128 entries per function
+    - EXP2/LOG2/SIN/COS: 64-entry tables (index[5:0])
+    - RCP: 128-entry table (full 7-bit index)
+    - SQRT/RSQRT: two 64-entry tables (even/odd), selected by index[6]
+    - Each entry stores (c0, c1, c2) as signed fixed-point integers
 
-S3: Normalized Residual Calculation (MUL0)
-    - Input: M_low (or F_low) and T
-    - Compute: r = M_low × T
-    - Output: FP32 format normalized residual
+S3: Poly Stage 1 — Squarer (1 cycle)
+    - Compute xl^2 (17×17 unsigned multiply)
+    - Truncate and shift to 15-bit aligned representation
 
-S4: Polynomial First Stage (CMA0)
-    - Input: r, c₁, c₂
-    - Compute: t = c₂ × r + c₁
-    - Uses FMA to reduce rounding errors
+S4: Poly Stage 2 — Parallel Multiply (1 cycle)
+    - Compute c1 × xl  (17×17 signed multiply → 35 bits)
+    - Compute c2 × xl² (13×15 signed multiply → 29 bits)
 
-S5: Polynomial Second Stage (CMA1)
-    - Input: r, t, c₀
-    - Compute: poly = r × t + c₀
-    - c₀ selected per function (EXP2: 1.0, LOG2: Value1, others: 1.0)
+S5: Poly Stage 3 — Align and Sum (1 cycle)
+    - Align c1·xl and c2·xl² to the scale of c0
+    - Compute polyResult = c0 + aligned(c1·xl) + aligned(c2·xl²)
+    - Output: 27-bit fixed-point result
 
-S6: Mantissa Composition / Integer Addition (Parallel)
-    [Branch 1] Mantissa Composition (MUL1)
-        - Input: Value1, poly
-        - Compute: mant = Value1 × poly
-        - Used for EXP2/RCP/SQRT/RSQRT
-
-    [Branch 2] Integer Addition (INT8ADDFP32)
-        - Input: E (SInt(8)), poly (FP32)
-        - Compute: result = E + poly
-        - Used for LOG2
-
-S7: Exponent Adjustment and Result Assembly (RecomposeFP32)
-    - Select input based on function type (mul1 or int8add result)
-    - Adjust exponent:
-      · EXP2: E_out = E_mant + I
-      · LOG2: Direct output of int8add result
-      · RCP: E_out = 254 - E_in + E_mant, preserve sign
-      · SQRT: E_out = E_mant + ⌊E/2⌋
-      · RSQRT: E_out = E_mant - ⌊E/2⌋
-    - If bypass flag set, output bypassVal; otherwise output adjusted result
+S6: Compose (1 cycle)
+    - Assemble final FP32 from polyResult and exp:
+      · EXP2:  exp_out = 127 + exp,  mant = polyResult[24:2]
+      · LOG2:  leading-zero detection on {exp, polyResult[25:0]}, normalize
+      · RCP:   exp_out = 126 - exp,  mant = polyResult[24:2]
+      · SQRT:  exp_out = 127 + exp,  mant = polyResult[24:2]
+      · RSQRT: exp_out = 126 - exp,  mant = polyResult[24:2]
+      · SIN/COS: leading-zero normalization; clamp to ±1 if polyResult overflows
+    - If bypass flag set, output bypassVal; otherwise output assembled result
 ```
 
 ### Key Features
 
-- **Unified Architecture**: Single pipeline serves all five functions
-- **7-Stage Pipeline**: One result per cycle after initial latency
-- **128-Entry LUTs**: Separate tables optimized for each function
-- **Second-Order Approximation**: Balances accuracy and hardware complexity
-- **Special Value Handling**: Comprehensive coverage of edge cases
+- **Unified Architecture**: Single 7-stage pipeline serves all seven functions
+- **Full Throughput**: One result per cycle after initial latency
+- **128-Entry LUTs**: Per-function coefficient tables (some split into even/odd for SQRT/RSQRT)
+- **Fixed-Point Polynomial**: Quadratic approximation in integer arithmetic — no FP multipliers in datapath
+- **Offline Coefficient Optimization**: Coefficients minimized via minimax optimization (optimizer tool)
+- **Special Value Handling**: Comprehensive coverage of IEEE 754 edge cases
 
-## Accuracy Verification
+## Accuracy
 
-Tested on 8,388,608 floating-point numbers in the interval $[1,2]$ to characterize approximation error bounds.
+Coefficients are optimized offline using the `optimizer` tool to minimize the worst-case absolute error within each sub-interval. The following tables compare accuracy against NVIDIA GPU results (measured with `-use_fast_math`) across $[0.25, 4)$.
 
-### 1. EXP2 (2^x)
+### EXP2
 
-**CPU Reference** (Standard C Library):
+| Interval | Implementation | MaxAbsErr | MaxULP | AvgAbsErr | AvgULP |
+|----------|---------------|-----------|--------|-----------|--------|
+| **[0.25, 0.5)** | This work | 2.384e-07 | **2** | 4.314e-08 | 0.36 |
+| | NVIDIA GPU | 1.192e-07 | 1 | 3.020e-08 | 0.25 |
+| **[0.5, 1)** | This work | 2.384e-07 | **2** | 4.269e-08 | 0.36 |
+| | NVIDIA GPU | 1.192e-07 | 1 | 3.746e-08 | 0.31 |
+| **[1, 2)** | This work | 2.384e-07 | **1** | 2.544e-08 | 0.11 |
+| | NVIDIA GPU | 2.384e-07 | 1 | 9.273e-08 | 0.39 |
+| **[2, 4)** | This work | 9.537e-07 | **1** | 7.624e-08 | 0.11 |
+| | NVIDIA GPU | 9.537e-07 | 1 | 2.801e-07 | 0.39 |
 
-```
-Total=8388608, Pass=8388608 (100.00%), Fail=0 (0.00%)
-AvgRelErr=3.632537e-08, MaxRelErr=2.358752e-07
-AvgAbsErr=1.033031e-07, MaxAbsErr=4.768372e-07
-AvgULP=0.43, MaxULP=2
-```
+### LOG2
 
-**GPU Reference** (NVIDIA CUDA):
+| Interval | Implementation | MaxAbsErr | MaxULP | AvgAbsErr | AvgULP |
+|----------|---------------|-----------|--------|-----------|--------|
+| **[0.25, 0.5)** | This work | 2.384e-07 | 2 | 6.518e-08 | 0.55 |
+| | NVIDIA GPU | 2.384e-07 | 2 | 1.201e-07 | 1.01 |
+| **[0.5, 1)** | This work | 1.192e-07 | 1.6M | 2.775e-08 | 3.43 |
+| | NVIDIA GPU | 2.384e-07 | 24M | 7.843e-08 | 20.06 |
+| **[1, 2)** | This work | 8.941e-08 | 866M | 1.802e-08 | 109.79 |
+| | NVIDIA GPU | 1.602e-07 | 6.1M | 4.342e-08 | 11.20 |
+| **[2, 4)** | This work | 2.384e-07 | **2** | 3.972e-08 | 0.33 |
+| | NVIDIA GPU | 1.192e-07 | 1 | 2.954e-08 | 0.25 |
 
-```
-Total=8388608, Pass=8388608 (100.00%), Fail=0 (0.00%)
-AvgRelErr=4.985170e-08, MaxRelErr=3.106841e-07
-AvgAbsErr=1.389425e-07, MaxAbsErr=7.152557e-07
-AvgULP=0.58, MaxULP=3
-```
+> **Note on LOG2 ULP near 1.0**: Very large ULP values in $[0.5, 2)$ are expected. Near $x = 1$, $\log_2(x) \approx 0$, so any small absolute error maps to an enormous ULP count. The absolute errors remain below $2^{-22}$ throughout.
 
-### 2. LOG2 (log₂(x))
+### RCP
 
-**CPU Reference** (Standard C Library):
+| Interval | Implementation | MaxAbsErr | MaxULP | AvgAbsErr | AvgULP |
+|----------|---------------|-----------|--------|-----------|--------|
+| **[0.25, 0.5)** | This work | 2.384e-07 | **1** | 2.183e-08 | 0.09 |
+| | NVIDIA GPU | 2.384e-07 | 1 | 3.151e-08 | 0.13 |
+| **[0.5, 1)** | This work | 1.192e-07 | **1** | 1.092e-08 | 0.09 |
+| | NVIDIA GPU | 1.192e-07 | 1 | 1.575e-08 | 0.13 |
+| **[1, 2)** | This work | 5.960e-08 | **1** | 5.459e-09 | 0.09 |
+| | NVIDIA GPU | 5.960e-08 | 1 | 7.877e-09 | 0.13 |
+| **[2, 4)** | This work | 2.980e-08 | **1** | 2.729e-09 | 0.09 |
+| | NVIDIA GPU | 2.980e-08 | 1 | 3.938e-09 | 0.13 |
 
-```
-Total=8388608, Pass=8369020 (99.77%), Fail=19588 (0.23%)
-AvgRelErr=1.905063e-07, MaxRelErr=2.035354e-05
-AvgAbsErr=2.722701e-08, MaxAbsErr=2.281740e-07
-AvgULP=2.25, MaxULP=245
-```
+### SQRT
 
-**GPU Reference** (NVIDIA CUDA):
+| Interval | Implementation | MaxAbsErr | MaxULP | AvgAbsErr | AvgULP |
+|----------|---------------|-----------|--------|-----------|--------|
+| **[0.25, 0.5)** | This work | 5.960e-08 | **1** | 4.992e-09 | 0.08 |
+| | NVIDIA GPU | 5.960e-08 | 1 | 9.946e-09 | 0.17 |
+| **[0.5, 1)** | This work | 5.960e-08 | **1** | 4.900e-09 | 0.08 |
+| | NVIDIA GPU | 5.960e-08 | 1 | 1.016e-08 | 0.17 |
+| **[1, 2)** | This work | 1.192e-07 | **1** | 9.985e-09 | 0.08 |
+| | NVIDIA GPU | 1.192e-07 | 1 | 1.989e-08 | 0.17 |
+| **[2, 4)** | This work | 1.192e-07 | **1** | 9.801e-09 | 0.08 |
+| | NVIDIA GPU | 1.192e-07 | 1 | 2.032e-08 | 0.17 |
 
-```
-Total=8388608, Pass=8334718 (99.36%), Fail=53890 (0.64%)
-AvgRelErr=1.065914e-06, MaxRelErr=3.842898e-01
-AvgAbsErr=6.248189e-08, MaxAbsErr=3.427267e-07
-AvgULP=13.18, MaxULP=6114246
-```
+### RSQRT
 
-### 3. RCP (1/x)
+| Interval | Implementation | MaxAbsErr | MaxULP | AvgAbsErr | AvgULP |
+|----------|---------------|-----------|--------|-----------|--------|
+| **[0.25, 0.5)** | This work | 1.192e-07 | **1** | 1.692e-08 | 0.14 |
+| | NVIDIA GPU | 2.384e-07 | 2 | 2.677e-08 | 0.22 |
+| **[0.5, 1)** | This work | 1.192e-07 | **1** | 1.388e-08 | 0.12 |
+| | NVIDIA GPU | 1.192e-07 | 1 | 2.488e-08 | 0.21 |
+| **[1, 2)** | This work | 5.960e-08 | **1** | 8.461e-09 | 0.14 |
+| | NVIDIA GPU | 1.192e-07 | 2 | 1.338e-08 | 0.22 |
+| **[2, 4)** | This work | 5.960e-08 | **1** | 6.942e-09 | 0.12 |
+| | NVIDIA GPU | 5.960e-08 | 1 | 1.244e-08 | 0.21 |
 
-**CPU Reference** (Standard C Library):
+### SIN
 
-```
-Total=8388608, Pass=8388608 (100.00%), Fail=0 (0.00%)
-AvgRelErr=5.899027e-08, MaxRelErr=5.448159e-07
-AvgAbsErr=4.385801e-08, MaxAbsErr=5.364418e-07
-AvgULP=0.74, MaxULP=9
-```
+| Interval | Implementation | MaxAbsErr | MaxULP | AvgAbsErr | AvgULP |
+|----------|---------------|-----------|--------|-----------|--------|
+| **[0.25, 0.5)** | This work | 2.980e-07 | 12 | 1.068e-07 | 3.61 |
+| | NVIDIA GPU | 3.278e-07 | 11 | 1.195e-07 | 4.03 |
+| **[0.5, 1)** | This work | 2.980e-07 | **10** | 1.019e-07 | 1.80 |
+| | NVIDIA GPU | 3.576e-07 | 10 | 1.140e-07 | 2.00 |
+| **[1, 2)** | This work | 2.384e-07 | **4** | 5.998e-08 | 1.01 |
+| | NVIDIA GPU | 2.384e-07 | 4 | 4.592e-08 | 0.77 |
+| **[2, 4)** | This work | 4.470e-07 | 6.4M | 1.214e-07 | 18.70 |
+| | NVIDIA GPU | 6.557e-07 | 884M | 1.678e-07 | 242.62 |
 
-**GPU Reference** (NVIDIA CUDA):
+### COS
 
-```
-Total=8388608, Pass=8388608 (100.00%), Fail=0 (0.00%)
-AvgRelErr=6.097077e-08, MaxRelErr=5.448201e-07
-AvgAbsErr=4.532859e-08, MaxAbsErr=5.364418e-07
-AvgULP=0.76, MaxULP=9
-```
+| Interval | Implementation | MaxAbsErr | MaxULP | AvgAbsErr | AvgULP |
+|----------|---------------|-----------|--------|-----------|--------|
+| **[0.25, 0.5)** | This work | 1.788e-07 | **3** | 6.779e-08 | 1.14 |
+| | NVIDIA GPU | 2.384e-07 | 4 | 4.643e-08 | 0.78 |
+| **[0.5, 1)** | This work | 2.980e-07 | **5** | 1.024e-07 | 1.72 |
+| | NVIDIA GPU | 2.980e-07 | 5 | 7.581e-08 | 1.27 |
+| **[1, 2)** | This work | 2.980e-07 | 8.7M | 1.017e-07 | 28.40 |
+| | NVIDIA GPU | 4.023e-07 | 875M | 1.188e-07 | 347.30 |
+| **[2, 4)** | This work | 2.980e-07 | **9** | 7.467e-08 | 1.33 |
+| | NVIDIA GPU | 4.172e-07 | 13 | 9.454e-08 | 1.72 |
 
-### 4. SQRT (√x)
+> **Note on SIN/COS ULP near zeros**: Large ULP values near $\sin(x) = 0$ or $\cos(x) = 0$ are expected for the same reason as LOG2 near 1. The absolute errors remain small.
 
-**CPU Reference** (Standard C Library):
+### NVIDIA PTX ISA Specification Compliance
 
-```
-Total=8388608, Pass=8388608 (100.00%), Fail=0 (0.00%)
-AvgRelErr=3.732800e-08, MaxRelErr=2.325453e-07
-AvgAbsErr=4.531020e-08, MaxAbsErr=2.384186e-07
-AvgULP=0.38, MaxULP=2
-```
+| Function | NVIDIA Spec | This Work (max over [0.5, 4)) | Status |
+|----------|-------------|-------------------------------|--------|
+| **EXP2** | Max 2 ULP | Max 2 ULP | **Satisfied** |
+| **LOG2** | Max $2^{-22}$ abs err in $(0.5, 2)$ | Max 2.384e-07 ($\approx 2^{-22}$) | **Satisfied** |
+| **RCP** | Max 1 ULP | Max 1 ULP | **Satisfied** |
+| **SQRT** | Max rel err $2^{-23}$ | Max rel err 1.192e-07 ($\approx 2^{-23}$) | **Satisfied** |
+| **RSQRT** | Max rel err $2^{-22.9}$ | Max rel err 1.192e-07 ($\approx 2^{-22.9}$) | **Satisfied** |
 
-**GPU Reference** (NVIDIA CUDA):
-
-```
-Total=8388608, Pass=8388608 (100.00%), Fail=0 (0.00%)
-AvgRelErr=4.005722e-08, MaxRelErr=2.347089e-07
-AvgAbsErr=4.860250e-08, MaxAbsErr=2.384186e-07
-AvgULP=0.41, MaxULP=2
-```
-
-### 5. RSQRT (1/√x)
-
-**CPU Reference** (Standard C Library):
-
-```
-Total=8388608, Pass=8388608 (100.00%), Fail=0 (0.00%)
-AvgRelErr=3.785930e-08, MaxRelErr=3.003264e-07
-AvgAbsErr=3.186491e-08, MaxAbsErr=2.980232e-07
-AvgULP=0.53, MaxULP=5
-```
-
-**GPU Reference** (NVIDIA CUDA):
-
-```
-Total=8388608, Pass=8388608 (100.00%), Fail=0 (0.00%)
-AvgRelErr=3.582606e-08, MaxRelErr=2.030197e-07
-AvgAbsErr=3.020077e-08, MaxAbsErr=1.788139e-07
-AvgULP=0.51, MaxULP=3
-```
-
-### Error Metrics Summary
-
-| Function | Avg ULP (CPU/GPU) | Max ULP (CPU/GPU) | Pass Rate |
-|----------|-------------------|-------------------|-----------|
-| EXP2     | 0.43 / 0.58       | 2 / 3             | 100.00%   |
-| LOG2     | 2.25 / 13.18      | 245 / 6114246     | 99.77% / 99.36% |
-| RCP      | 0.74 / 0.76       | 9 / 9             | 100.00%   |
-| SQRT     | 0.38 / 0.41       | 2 / 2             | 100.00%   |
-| RSQRT    | 0.53 / 0.51       | 5 / 3             | 100.00%   |
-
-**Note**: LOG2 shows higher error rates and ULP values due to the challenging nature of logarithm approximation near 1.0, where relative errors are magnified.
+$2^{-22} \approx 2.38 \times 10^{-7}$, $2^{-23} \approx 1.19 \times 10^{-7}$
 
 ## Dependencies
 
@@ -248,22 +237,13 @@ AvgULP=0.51, MaxULP=3
 
 ## Building
 
-### Initialize Dependencies
-
-```bash
-make init
-```
-
-This will initialize the XiangShan Fudian submodule.
-
 ### Generate SystemVerilog
 
 ```bash
-# Generate SFU RTL
 ./mill --no-server SFU.run
 ```
 
-The generated SystemVerilog will be placed in `rtl/SFU.sv`.
+The generated SystemVerilog will be placed in `generated/`.
 
 ### Build and Run Simulation
 
@@ -276,8 +256,15 @@ The build system automatically detects CUDA availability:
 - **Without CUDA**: Uses CPU reference only (standard C math library)
 - **With CUDA**: Uses both CPU and GPU references simultaneously
   - CPU Reference: Standard C math library
-  - GPU Reference: NVIDIA CUDA math library with `-use_fast_math` flag
-  - Both error statistics are computed and displayed for comparison
+  - GPU Reference: NVIDIA CUDA math library with `-use_fast_math`
+
+### Optimize Coefficients
+
+```bash
+make -C optimizer
+```
+
+Runs the minimax optimizer to generate optimized LUT coefficients into `lut/`.
 
 ### Clean Build Artifacts
 
@@ -291,47 +278,17 @@ make clean
 
 Verilator-based testbench with:
 
-- Comprehensive test vector generation across full FP32 range
+- Test vector generation across full FP32 range $[0.25, 4)$ in sub-intervals
 - Special value testing (NaN, Inf, zero, negative numbers, subnormals)
 - ULP (Unit in Last Place) error measurement
 - Waveform generation (FST format) for debugging
 
-### Reference Models
-
-The testbench automatically uses available reference implementations:
-
-- **CPU Reference**: Standard C math library - always available
-- **GPU Reference**: NVIDIA CUDA math library with `-use_fast_math` - automatically enabled if CUDA is detected
-
-When both references are available, error statistics are computed against both to provide comprehensive verification.
-
 ### Accuracy Metrics
 
-- **ULP Error**: Measures floating-point accuracy in terms of "units in the last place"
+- **ULP Error**: Floating-point accuracy in units of the last place
 - **Relative Error**: Percentage deviation from reference value
 - **Absolute Error**: Absolute difference from reference value
-- **Pass/Fail**: Based on acceptable ULP threshold
-
-## Future Improvements
-
-- [ ] Optimize polynomial coefficients using Remez algorithm
-- [ ] Add configurable rounding mode support
-- [ ] Implement denormal number handling
-
-## Credits
-
-- **XiangShan Fudian FPU Library**: Provides high-quality floating-point arithmetic components
-  - Repository: <https://github.com/OpenXiangShan/fudian>
-  - Used for: FMUL, FCMA_ADD, RawFloat utilities
 
 ## References
 
-- IEEE Standard for Floating-Point Arithmetic (IEEE 754-2008)
-- XiangShan Fudian FPU: <https://github.com/OpenXiangShan/fudian>
-- Chisel/FIRRTL Documentation: <https://www.chisel-lang.org/>
-- CUDA Math API: <https://docs.nvidia.com/cuda/cuda-math-api/>
-- Handbook of Floating-Point Arithmetic (Muller et al.)
-
-## License
-
-This project reuses the XiangShan Fudian library. Please refer to the respective license files in the `dependencies/fudian` directory for licensing terms.
+\[1\] S. F. Oberman and M. Y. Siu, "A high-performance area-efficient multifunction interpolator," *17th IEEE Symposium on Computer Arithmetic (ARITH'05)*, Cape Cod, MA, USA, 2005, pp. 272–279, doi: [10.1109/ARITH.2005.7](https://doi.org/10.1109/ARITH.2005.7).
