@@ -40,13 +40,7 @@ The three coefficients $(c_0, c_1, c_2)$ are stored per interval in a LUT and op
 
 For **EXP2**, the argument is decomposed as $x = I + F$ where $I = \lfloor x \rfloor$ is the integer part and $F$ is the fractional part. The polynomial approximates $2^F$ over $[0, 1)$, and the exponent $I$ is applied in the compose stage.
 
-For **SIN/COS**, the functions computed are $\sin(\frac{\pi}{2} x)$ and $\cos(\frac{\pi}{2} x)$. The period is 4, so `quadrant = floor(x) mod 4` is read from the two low bits of the integer part of $x$. The LUT stores coefficients for $\sin(\frac{\pi}{2} t)$ over $t \in [0, 1)$ with 64 sub-intervals. The fractional part $f \in [0, 1)$ is mapped to the LUT argument $t$ using:
-
-$$
-t = \begin{cases} f & \text{if } \text{quadrant}[0] = 0 \\ 1 - f & \text{if } \text{quadrant}[0] = 1 \end{cases}
-$$
-
-exploiting the identity $\sin\!\left(\frac{\pi}{2}(1+f)\right) = \cos\!\left(\frac{\pi}{2}f\right) = \sin\!\left(\frac{\pi}{2}(1-f)\right)$. For COS, the mapping is inverted ($t = 1-f$ when `quadrant[0] = 0`). The output sign is `input_sign XOR quadrant[1]` for SIN, and `quadrant[1] XOR quadrant[0]` for COS. Both functions share one coefficient table.
+For **SIN/COS**, the functions computed are $\sin(\frac{\pi}{2} x)$ and $\cos(\frac{\pi}{2} x)$. The period is 4, so `quadrant = floor(x) mod 4` is read from the two low bits of the integer part of $x$. The LUT stores coefficients for $\sin(\frac{\pi}{2} t)$ over $t \in [0, 1)$ with 64 sub-intervals. The fractional part $f \in [0, 1)$ is used for interpolation, and the quadrant determines whether to use $t = f$ or $t = 1 - f$ and the sign of the result.
 
 The final result is assembled by combining the polynomial output with the input exponent according to each function's composition rule.
 
