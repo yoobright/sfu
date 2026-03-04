@@ -16,8 +16,6 @@ This project implements a unified **Special Function Unit (SFU)** that supports 
 
 The architecture is based on the multifunction interpolation approach described by Oberman and Siu \[1\], which is consistent with the design used in NVIDIA SFUs.
 
-This project reuses the **XiangShan Fudian** floating-point unit library for basic FP32 arithmetic operations.
-
 ## Algorithm
 
 Each function is approximated by a **quadratic polynomial** over a set of small sub-intervals. Given an input $x$:
@@ -222,49 +220,11 @@ $2^{-22} \approx 2.38 \times 10^{-7}$, $2^{-23} \approx 1.19 \times 10^{-7}$
 - **Scala 2.13.15**: Programming language for Chisel
 - **Mill**: Build tool for Scala/Chisel projects
 - **Verilator**: For simulation and verification
-- **XiangShan Fudian**: Floating-point arithmetic library (included as git submodule)
 
 ### Optional
 
 - **CUDA/NVCC**: For GPU-accelerated reference implementation (NVIDIA GPU required)
 - **Synopsys Design Compiler**: For ASIC synthesis
-
-## Building
-
-### Generate SystemVerilog
-
-```bash
-./mill --no-server SFU.run
-```
-
-The generated SystemVerilog will be placed in `generated/`.
-
-### Build and Run Simulation
-
-```bash
-make run
-```
-
-The build system automatically detects CUDA availability:
-
-- **Without CUDA**: Uses CPU reference only (standard C math library)
-- **With CUDA**: Uses both CPU and GPU references simultaneously
-  - CPU Reference: Standard C math library
-  - GPU Reference: NVIDIA CUDA math library with `-use_fast_math`
-
-### Optimize Coefficients
-
-```bash
-make -C optimizer
-```
-
-Runs the minimax optimizer to generate optimized LUT coefficients into `lut/`.
-
-### Clean Build Artifacts
-
-```bash
-make clean
-```
 
 ## Testing and Verification
 
