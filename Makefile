@@ -37,7 +37,7 @@ endif
 all: run
 
 run: $(TARGET)
-	@LUT_PATH=./lut-optimized ./$(TARGET)
+	@LUT_PATH=./lut ./$(TARGET)
 
 util/build/libutil.a:
 	$(MAKE) -C util
