@@ -18,6 +18,7 @@ std::vector<LUTEntry> SFULUT::load_lut(const char *filename, int num_entries) {
   std::ifstream file(filename);
 
   if (!file.is_open()) {
+    printf("Warning: Could not open LUT file %s\n", filename);
     return lut;
   }
 
@@ -40,7 +41,7 @@ std::vector<LUTEntry> SFULUT::load_lut(const char *filename, int num_entries) {
 
 void SFULUT::init() {
   const char *lut_path = std::getenv("LUT_PATH");
-  std::string base_path = lut_path ? lut_path : "lut";
+  std::string base_path = lut_path ? lut_path : "../lut";
 
   exp2_lut = load_lut((base_path + "/exp2-coeffs.txt").c_str(), 64);
   log2_lut = load_lut((base_path + "/log2-coeffs.txt").c_str(), 64);
