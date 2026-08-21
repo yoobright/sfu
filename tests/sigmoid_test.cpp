@@ -41,8 +41,17 @@ int main() {
   ok &= check_special(-0.0f, 0x3F000000);
   ok &= check_special(std::numeric_limits<float>::infinity(), 0x3F800000);
   ok &= check_special(-std::numeric_limits<float>::infinity(), 0x00000000);
-  ok &= check_special(16.0f, 0x3F800000);
-  ok &= check_special(-16.0f, 0x00000000);
+  ok &= check_special(6.0f, 0x3F800000);
+  ok &= check_special(-6.0f, 0x00000000);
+
+  float below_saturation = std::nextafter(6.0f, 0.0f);
+  if (bits(SFUCore::compute(below_saturation, SFUOp::SIGMOID)) ==
+          0x3F800000 ||
+      bits(SFUCore::compute(-below_saturation, SFUOp::SIGMOID)) ==
+          0x00000000) {
+    std::cerr << "sigmoid saturated below |x| = 6\n";
+    ok = false;
+  }
 
   float nan_result = SFUCore::compute(std::numeric_limits<float>::quiet_NaN(),
                                       SFUOp::SIGMOID);
@@ -51,7 +60,8 @@ int main() {
     ok = false;
   }
 
-  constexpr uint32_t kReducedValues = 1U << 23;
+  // |x| / 16 uses Q0.23, so [0, 6) contains 6 * 2^19 values.
+  constexpr uint32_t kReducedValues = 6U << 19;
   double max_abs_error = 0.0;
   double max_monotonic_reversal = 0.0;
   float previous = 0.0f;

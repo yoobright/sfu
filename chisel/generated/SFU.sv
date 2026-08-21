@@ -81,7 +81,7 @@ module Filter(	// scala/SFU.scala:180:7
   wire             _tooNeg_T = io_in_bits_x[30:23] > 8'h85;	// scala/SFU.scala:187:23, :195:27
   wire             tooBig = ~(io_in_bits_x[31]) & _tooNeg_T;	// scala/SFU.scala:186:23, :195:{17,21,27}
   wire             _GEN = isInf | isNaN;	// scala/SFU.scala:191:34, :192:34, src/main/scala/chisel3/util/Mux.scala:126:16
-  wire             sigmoidSaturate = io_in_bits_x[30:23] > 8'h82;
+  wire             sigmoidSaturate = io_in_bits_x[30:0] >= 31'h40C00000;
   wire             _GEN_0 = io_in_bits_op == 3'h6 & (isZero | isInf | isNaN);	// scala/SFU.scala:190:21, :191:34, :192:34, :248:{28,43}, :249:{15,34}, :256:15
   wire [7:0]       _GEN_1 =
     {{isZero | isInf | isNaN | sigmoidSaturate},

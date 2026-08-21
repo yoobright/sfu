@@ -30,7 +30,7 @@ RangeReduceOutput SFURangeReduce::reduce(const FilterOutput &input, SFUOp op) {
                                  ? ((frac_part_inv + 1) & 0x7FFFFF)
                                  : frac_part;
   // sigmoid_arg is |x| / 16 represented as a 23-bit fraction.  Inputs with
-  // |x| >= 16 have already been saturated by the filter stage.
+  // |x| >= 6 have already been saturated by the filter stage.
   uint32_t sigmoid_arg = (sig_shifted >> 4) & 0x7FFFFF;
 
   uint8_t quadrand = int_part & 0x3;

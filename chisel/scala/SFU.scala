@@ -258,7 +258,7 @@ class Filter extends Module {
       isNaN  -> SFUParameters.NAN
     ))
   }.elsewhen(io.in.bits.op === SFUOp.SIGMOID) {
-    val saturate = e >= 131.U // |x| >= 16
+    val saturate = io.in.bits.x(30, 0) >= "h40C00000".U(31.W) // |x| >= 6
     bypass    := isZero || isInf || isNaN || saturate
     bypassVal := MuxCase(SFUParameters.POS_ZERO, Seq(
       isZero   -> "h3F000000".U(32.W),
@@ -318,7 +318,7 @@ class RangeReduce extends Module {
   val fracSin  = Mux(quadrant(0), fracPartInv , fracPart)
   val fracCos  = Mux(quadrant(0), fracPart    , fracPartInv)
 
-  // |x| / 16 as a 23-bit fraction.  Values at or above 16 bypass in Filter.
+  // |x| / 16 as a 23-bit fraction. Values at or above 6 bypass in Filter.
   val sigmoidArg = sigShifted(26, 4)
 
   val signFinal = MuxLookup(op, sign.asUInt) (Seq(

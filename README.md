@@ -42,11 +42,12 @@ For **EXP2**, the argument is decomposed as $x = I + F$ where $I = \lfloor x \rf
 For **SIN/COS**, the functions computed are $\sin(\frac{\pi}{2} x)$ and $\cos(\frac{\pi}{2} x)$. The period is 4, so `quadrant = floor(x) mod 4` is read from the two low bits of the integer part of $x$. The LUT stores coefficients for $\sin(\frac{\pi}{2} t)$ over $t \in [0, 1)$ with 64 sub-intervals. The fractional part $f \in [0, 1)$ is used for interpolation, and the quadrant determines whether to use $t = f$ or $t = 1 - f$ and the sign of the result.
 
 For **SIGMOID**, symmetry reduces the approximation to
-$h=\sigma(-|x|)$ over $|x|\in[0,16)$. The normalized argument
+$h=\sigma(-|x|)$. The normalized argument
 $u=|x|/16$ is divided into 128 intervals. The LUT approximates $h(u)$ in
 unsigned Q0.26 using a positive $C_0$, negative $C_1$, and positive $C_2$;
 the compose stage returns $h$ for negative inputs and $1-h$ for non-negative
-inputs. Inputs with $|x|\ge16$ saturate to 0 or 1. The coefficients are formed
+inputs. Inputs with $|x|\ge6$ saturate to 0 or 1, so indices 0 through 47 are
+reachable in the interpolated region. The coefficients are formed
 with a degree-2 minimax solve, finite-word quantization, compensation search,
 and exhaustive evaluation of all $2^{23}$ reduced inputs, following the
 enhanced-minimax procedure in \[1\]. Run `python3 tools/gen_sigmoid_lut.py` to
@@ -62,6 +63,7 @@ The final result is assembled by combining the polynomial output with the input 
 S0: Filter (1 cycle)
     - Handle special values: NaN, ±Inf, ±0, subnormals (treated as zero)
     - Handle out-of-range inputs for EXP2 (overflow/underflow)
+    - Saturate SIGMOID to 0 or 1 when |x| >= 6
     - Handle negative inputs for LOG2, SQRT, RSQRT
     - Output bypass flag and bypass value for special cases
     - Pass normal inputs to next stage
@@ -216,11 +218,24 @@ Coefficients are optimized offline using the `optimizer` tool to minimize the wo
 
 ### SIGMOID
 
-The coefficient generator exhaustively evaluates all $2^{23}$ reduced inputs
-over $[0,16)$. The maximum fixed-point interpolation absolute error is
-`2.648e-6`. Negative inputs use the exact symmetry reconstruction
-$\sigma(-x)=1-\sigma(x)$; special values and the saturated tails are checked
-separately. Run `make test-cmodel` for the exhaustive C-model regression.
+The experiment uses the same four positive intervals as the other functions,
+plus $[4,6)$ to cover the remainder of the non-saturated positive domain. Every
+FP32 input in each half-open interval is evaluated. The C model is compared
+with the FP32 rounding of a double-precision sigmoid reference.
+
+| Interval | Implementation | MaxAbsErr | MaxULP | AvgAbsErr | AvgULP |
+|----------|---------------|-----------|--------|-----------|--------|
+| **[0.25, 0.5)** | This work | 3.159e-06 | **53** | 1.347e-06 | 22.60 |
+| **[0.5, 1)** | This work | 2.265e-06 | **38** | 8.149e-07 | 13.67 |
+| **[1, 2)** | This work | 7.749e-07 | **13** | 2.031e-07 | 3.41 |
+| **[2, 4)** | This work | 6.557e-07 | **11** | 2.122e-07 | 3.56 |
+| **[4, 6)** | This work | 3.576e-07 | **6** | 8.283e-08 | 1.39 |
+
+Negative inputs are covered by the symmetry regression
+$\sigma(-x)=1-\sigma(x)$. At $|x|\ge6$, the output intentionally saturates to
+0 or 1 and is therefore outside the interpolation-accuracy experiment. Run
+`make accuracy-sigmoid` to reproduce the table and `make test-cmodel` for the
+reduced-domain, symmetry, boundary, and special-value regression.
 
 ### NVIDIA PTX ISA Specification Compliance
 

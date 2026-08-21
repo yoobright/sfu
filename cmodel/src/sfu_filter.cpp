@@ -104,7 +104,7 @@ FilterOutput SFUFilter::filter(uint32_t input_bits, SFUOp op) {
     }
     break;
   case SFUOp::SIGMOID:
-    if (is_inf || exp >= 131) {
+    if (is_inf || (input_bits & 0x7FFFFFFF) >= 0x40C00000) {
       out.bypass = true;
       out.bypass_val = sign ? 0x00000000 : 0x3F800000;
     } else if (exp == 0) {
