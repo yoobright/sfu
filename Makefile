@@ -2,10 +2,11 @@ CXX      = g++
 CXXFLAGS = -std=c++17 -O3
 
 CUDA_AVAILABLE := $(shell which nvcc > /dev/null 2>&1 && echo 1 || echo 0)
-VERILATOR_ROOT := $(shell verilator --getenv VERILATOR_ROOT)
+VERILATOR_ROOT := $(shell command -v verilator >/dev/null 2>&1 && verilator --getenv VERILATOR_ROOT)
 
 BUILD_DIR = build
 TARGET    = $(BUILD_DIR)/sfu_test
+SIGMOID_TEST = $(BUILD_DIR)/sigmoid_test
 
 VERILATOR_SRCS = $(VERILATOR_ROOT)/include/verilated.cpp $(VERILATOR_ROOT)/include/verilated_threads.cpp
 
@@ -36,6 +37,9 @@ endif
 
 all: run
 
+test-cmodel: $(SIGMOID_TEST)
+	@LUT_PATH=./lut ./$(SIGMOID_TEST)
+
 run: $(TARGET)
 	@LUT_PATH=./lut ./$(TARGET)
 
@@ -60,6 +64,9 @@ chisel/build/libchisel.a:
 $(TARGET): main.cpp $(LIBS) | $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -o $@ $< $(VERILATOR_SRCS) $(LIBS) $(LDFLAGS)
 
+$(SIGMOID_TEST): tests/sigmoid_test.cpp cmodel/build/libcmodel.a | $(BUILD_DIR)
+	$(CXX) $(CXXFLAGS) -I./cmodel/include -o $@ $< cmodel/build/libcmodel.a
+
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
 
@@ -67,4 +74,4 @@ clean:
 	rm -rf $(BUILD_DIR)
 	for dir in $(SUBDIRS); do $(MAKE) -C $$dir clean; done
 
-.PHONY: all clean $(SUBDIRS)
+.PHONY: all clean test-cmodel $(SUBDIRS)

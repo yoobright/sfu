@@ -75,6 +75,26 @@ uint32_t SFUCompose::compose(const PolyOutput &input, SFUOp op) {
     }
     break;
   }
+  case SFUOp::SIGMOID: {
+    // The LUT approximates h = sigmoid(-|x|) in unsigned Q0.26.  Reconstruct
+    // positive inputs with sigmoid(x) = 1 - h, then normalize to FP32.
+    uint32_t sigmoid_fixed =
+        sign ? poly_result : ((1U << 26) - poly_result);
+
+    if (sigmoid_fixed == 0) {
+      result = 0;
+      break;
+    }
+
+    int leading_bit = 31 - __builtin_clz(sigmoid_fixed);
+    uint8_t exp_out = static_cast<uint8_t>(leading_bit + 101);
+    uint32_t normalized = leading_bit > 23
+                              ? sigmoid_fixed >> (leading_bit - 23)
+                              : sigmoid_fixed << (23 - leading_bit);
+    uint32_t mant_out = normalized & 0x7FFFFF;
+    result = (static_cast<uint32_t>(exp_out) << 23) | mant_out;
+    break;
+  }
   }
 
   return result;

@@ -47,6 +47,7 @@ private:
     std::vector<LUTEntry> temp_rsqrt_even_lut_;
     std::vector<LUTEntry> temp_rsqrt_odd_lut_;
     std::vector<LUTEntry> temp_sin_lut_;
+    std::vector<LUTEntry> temp_sigmoid_lut_;
 };
 
 #endif // SEGMENT_EVALUATOR_H

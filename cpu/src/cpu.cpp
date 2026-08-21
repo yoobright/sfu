@@ -17,6 +17,13 @@ float CPU::compute(float input, SFUOp op) {
     return sinf(input);
   case SFUOp::COS:
     return cosf(input);
+  case SFUOp::SIGMOID:
+    if (input >= 0.0f)
+      return 1.0f / (1.0f + expf(-input));
+    {
+      float exp_x = expf(input);
+      return exp_x / (1.0f + exp_x);
+    }
   default:
     return 0.0f;
   }

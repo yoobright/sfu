@@ -20,6 +20,7 @@ SegmentEvaluator::SegmentEvaluator() {
   temp_rsqrt_even_lut_.resize(64);
   temp_rsqrt_odd_lut_.resize(64);
   temp_sin_lut_.resize(64);
+  temp_sigmoid_lut_.resize(128);
 }
 
 SegmentEvaluator::~SegmentEvaluator() {}

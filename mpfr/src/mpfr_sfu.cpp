@@ -34,6 +34,12 @@ float MPFR::compute_float(float input, SFUOp op) {
   case SFUOp::COS:
     mpfr_cos(result, x, MPFR_RNDN);
     break;
+  case SFUOp::SIGMOID:
+    mpfr_neg(result, x, MPFR_RNDN);
+    mpfr_exp(result, result, MPFR_RNDN);
+    mpfr_add_ui(result, result, 1, MPFR_RNDN);
+    mpfr_ui_div(result, 1, result, MPFR_RNDN);
+    break;
   }
 
   float output = mpfr_get_flt(result, MPFR_RNDN);
@@ -73,6 +79,12 @@ double MPFR::compute_double(double input, SFUOp op) {
     break;
   case SFUOp::COS:
     mpfr_cos(result, x, MPFR_RNDN);
+    break;
+  case SFUOp::SIGMOID:
+    mpfr_neg(result, x, MPFR_RNDN);
+    mpfr_exp(result, result, MPFR_RNDN);
+    mpfr_add_ui(result, result, 1, MPFR_RNDN);
+    mpfr_ui_div(result, 1, result, MPFR_RNDN);
     break;
   }
 

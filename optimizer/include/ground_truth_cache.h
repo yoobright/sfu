@@ -48,6 +48,7 @@ private:
 
     // Generate input values for a range
     static std::vector<uint32_t> generate_inputs(
+        SFUOp op,
         float range_start,
         float range_end,
         int m_bits
