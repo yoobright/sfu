@@ -5,10 +5,12 @@ The construction follows Oberman and Siu's enhanced-minimax workflow:
 compute a degree-2 minimax approximation per segment, quantize the finite-word
 coefficients, compensate the quantization with a local integer search, and
 exhaustively evaluate every 16-bit local argument against the bit-accurate
-datapath truncations.  Both layouts use SIN-like region folding and
-power-of-two segment widths:
+datapath truncations.  The 128-entry RTL layout uses SIN-like power-of-two
+region folding.  The 64-entry area experiment reallocates entries toward the
+worst-error [2, 4) region:
 
-* 64 entries:  32 x 1/16 on [0, 2), then 32 x 1/8 on [2, 6)
+* 64 entries:  32 x 1/16 on [0, 2), 20 x 1/10 on [2, 4),
+               then 12 x 1/6 on [4, 6)
 * 128 entries: 64 x 1/32 on [0, 2), then 64 x 1/16 on [2, 6)
 """
 
@@ -45,7 +47,14 @@ def sigmoid_negative_abs(x: np.ndarray) -> np.ndarray:
 
 
 def segment_geometry(segment: int, num_segments: int) -> tuple[float, float]:
-    """Return the start and width of a power-of-two sigmoid interval."""
+    """Return the start and width of a sigmoid interval."""
+    if num_segments == 64:
+        if segment < 32:
+            return segment / 16.0, 1.0 / 16.0
+        if segment < 52:
+            return 2.0 + (segment - 32) / 10.0, 1.0 / 10.0
+        return 4.0 + (segment - 52) / 6.0, 1.0 / 6.0
+
     half = num_segments // 2
     if segment < half:
         width = 2.0 / half

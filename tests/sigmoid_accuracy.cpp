@@ -68,6 +68,7 @@ AccuracyStats measure(const Interval &interval, uint32_t lut_entries) {
 } // namespace
 
 int main() {
+  bool ok = true;
   for (uint32_t lut_entries : {64U, 128U}) {
     std::array<Interval, 6> intervals = {{
         {"[0, 0.25)", 0, lut_entries == 128 ? 1U << 19 : 1U << 18, true},
@@ -79,10 +80,13 @@ int main() {
     }};
 
     SFUCore::init(lut_entries);
+    uint64_t configuration_max_ulp = 0;
     std::cout << "\nSIGMOID " << lut_entries << "-entry LUT\n";
     std::cout << "Interval       Samples  MaxAbsErr    MaxULP  AvgAbsErr    AvgULP\n";
     for (const Interval &interval : intervals) {
       AccuracyStats stats = measure(interval, lut_entries);
+      configuration_max_ulp =
+          std::max(configuration_max_ulp, stats.max_ulp);
       std::cout << std::left << std::setw(14) << interval.name << std::right
                 << std::setw(9) << stats.samples << "  " << std::scientific
                 << std::setprecision(6) << std::setw(12) << stats.max_abs_error
@@ -93,6 +97,13 @@ int main() {
                 << std::setprecision(2) << std::setw(6)
                 << static_cast<double>(stats.sum_ulp) / stats.samples << '\n';
     }
+    uint64_t expected_max_ulp = lut_entries == 128 ? 5 : 8;
+    if (configuration_max_ulp > expected_max_ulp) {
+      std::cerr << "SIGMOID " << lut_entries << "-entry MaxULP "
+                << configuration_max_ulp << " exceeds " << expected_max_ulp
+                << '\n';
+      ok = false;
+    }
   }
-  return 0;
+  return ok ? 0 : 1;
 }

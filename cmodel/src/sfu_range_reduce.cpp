@@ -122,9 +122,10 @@ RangeReduceOutput SFURangeReduce::reduce(const FilterOutput &input, SFUOp op) {
     break;
   case SFUOp::SIGMOID:
     out.exp = 0;
-    // Like SIN/COS quadrant folding, select a power-of-two region and then
-    // split the local coordinate into a table index and a 16-bit fraction.
-    // All entries are reachable before the |x| >= 6 saturation boundary.
+    // Select a region and split the local coordinate into a table index and a
+    // 16-bit fraction.  The default 128-entry layout uses power-of-two bit
+    // slices; the 64-entry experiment uses shift-add scaling.  All entries
+    // are reachable before the |x| >= 6 saturation boundary.
     if (sigmoid_lut_entries == 128) {
       if (int_part < 2) {
         // [0, 2): 64 intervals of width 1/32.
@@ -135,14 +136,27 @@ RangeReduceOutput SFURangeReduce::reduce(const FilterOutput &input, SFUOp op) {
         out.index = 64 + (((sig_shifted >> 19) & 0x7F) - 32);
         out.xl = (sig_shifted >> 3) & 0xFFFF;
       }
-    } else if (int_part < 2) {
-      // [0, 2): 32 intervals of width 1/16.
-      out.index = (sig_shifted >> 19) & 0x1F;
-      out.xl = (sig_shifted >> 3) & 0xFFFF;
     } else {
-      // [2, 6): 32 intervals of width 1/8.
-      out.index = 32 + (((sig_shifted >> 20) & 0x3F) - 16);
-      out.xl = (sig_shifted >> 4) & 0xFFFF;
+      // The 64-entry experiment gives [2, 4) more entries, where the
+      // quadratic approximation previously reached its worst error.
+      uint64_t scaled;
+      if (int_part < 2) {
+        // [0, 2): 32 intervals of width 1/16.
+        out.index = (sig_shifted >> 19) & 0x1F;
+        out.xl = (sig_shifted >> 3) & 0xFFFF;
+      } else if (int_part < 4) {
+        // [2, 4): 20 intervals of width 1/10.
+        uint64_t delta = sig_shifted - (2U << 23);
+        scaled = (delta << 3) + (delta << 1);
+        out.index = 32 + ((scaled >> 23) & 0x1F);
+        out.xl = (scaled >> 7) & 0xFFFF;
+      } else {
+        // [4, 6): 12 intervals of width 1/6.
+        uint64_t delta = sig_shifted - (4U << 23);
+        scaled = (delta << 2) + (delta << 1);
+        out.index = 52 + ((scaled >> 23) & 0xF);
+        out.xl = (scaled >> 7) & 0xFFFF;
+      }
     }
     break;
   default:

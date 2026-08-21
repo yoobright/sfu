@@ -47,21 +47,21 @@ $h$ in unsigned Q0.26 using a positive $C_0$, negative $C_1$, and positive
 $C_2$; the compose stage returns $h$ for negative inputs and $1-h$ for
 non-negative inputs. Inputs with $|x|\ge6$ intentionally saturate to 0 or 1.
 
-Like SIN's quadrant/range mapping, SIGMOID uses simple comparisons and bit
-slices rather than a divider. The split at 2 assigns more intervals to the
-high-curvature region near the origin while retaining power-of-two interval
-widths. Every LUT entry is reachable:
+Like SIN's quadrant/range mapping, the default 128-entry SIGMOID uses simple
+comparisons and bit slices rather than a divider. The 64-entry area experiment
+uses shift-add scaling to move four entries from $[4,6)$ into the higher-error
+$[2,4)$ region. Every LUT entry is reachable:
 
-| Configuration | $[0,2)$ | $[2,6)$ | Worst exhaustive fixed-point error |
-|---------------|-----------|-----------|------------------------------------|
-| 64 entries | 32 intervals, width $1/16$ | 32 intervals, width $1/8$ | `5.250e-7` |
-| 128 entries (RTL default) | 64 intervals, width $1/32$ | 64 intervals, width $1/16$ | `1.445e-7` |
+| Configuration | $[0,2)$ | $[2,4)$ | $[4,6)$ | Worst exhaustive fixed-point error |
+|---------------|-----------|-----------|-----------|------------------------------------|
+| 64 entries | 32 × $1/16$ | 20 × $1/10$ | 12 × $1/6$ | `4.337e-7` |
+| 128 entries (RTL default) | 64 × $1/32$ | 32 × $1/16$ | 32 × $1/16$ | `1.445e-7` |
 
 The coefficients are formed with a degree-2 minimax solve, finite-word
 quantization, compensation search, and exhaustive evaluation of all 65,536
 local fixed-point arguments in every interval, following the enhanced-minimax
-procedure in \[1\]. The 64-entry tail uses a $2^{-22}$ $C_2$ scale because its
-intervals are twice as wide; the default 128-entry table uses $2^{-24}$.
+procedure in \[1\]. The wider intervals in the 64-entry experiment use a
+$2^{-22}$ $C_2$ scale; the default 128-entry table uses $2^{-24}$.
 Run `python3 tools/gen_sigmoid_lut.py --segments 64` and
 `python3 tools/gen_sigmoid_lut.py --segments 128` to reproduce both tables
 (NumPy and SciPy are required).
@@ -249,15 +249,15 @@ of a double-precision sigmoid reference.
 | | 128 entries | 2.384e-07 | **4** | 6.989e-08 | 1.17 |
 | **[1, 2)** | 64 entries | 2.980e-07 | 5 | 9.369e-08 | 1.57 |
 | | 128 entries | 1.788e-07 | **3** | 4.527e-08 | 0.76 |
-| **[2, 4)** | 64 entries | 7.153e-07 | 12 | 2.134e-07 | 3.58 |
+| **[2, 4)** | 64 entries | 4.768e-07 | 8 | 1.226e-07 | 2.06 |
 | | 128 entries | 2.384e-07 | **4** | 5.318e-08 | 0.89 |
-| **[4, 6)** | 64 entries | 2.384e-07 | 4 | 5.081e-08 | 0.85 |
+| **[4, 6)** | 64 entries | 4.768e-07 | 8 | 1.109e-07 | 1.86 |
 | | 128 entries | 1.788e-07 | **3** | 2.804e-08 | 0.47 |
 
 The 128-entry configuration has a worst case of 5 ULP across all measured
-intervals; the 64-entry experiment reaches 12 ULP in $[2,4)$ and is retained
-as the area/accuracy comparison point. The RTL and optimizer use 128 entries
-by default.
+intervals. Reallocating four of the 64-entry tail segments reduces its worst
+case from 12 to 8 ULP; it is retained as the area/accuracy comparison point.
+The RTL and optimizer use 128 entries by default.
 
 Negative inputs are covered by the symmetry regression
 $\sigma(-x)=1-\sigma(x)$. At $|x|\ge6$, the output intentionally saturates to

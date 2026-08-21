@@ -1,4 +1,6 @@
 #include "sfu_core.h"
+#include "sfu_filter.h"
+#include "sfu_range_reduce.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -62,15 +64,37 @@ bool test_configuration(uint32_t lut_entries) {
   double max_abs_error = 0.0;
   double max_monotonic_reversal = 0.0;
   float previous = 0.0f;
-  uint32_t half = lut_entries / 2;
   for (uint32_t segment = 0; segment < lut_entries; ++segment) {
-    float start = segment < half
-                      ? static_cast<float>(segment) * (2.0f / half)
-                      : 2.0f + static_cast<float>(segment - half) *
-                                   (4.0f / half);
-    float width = segment < half ? 2.0f / half : 4.0f / half;
+    float start;
+    float width;
+    if (lut_entries == 64 && segment < 32) {
+      start = static_cast<float>(segment) / 16.0f;
+      width = 1.0f / 16.0f;
+    } else if (lut_entries == 64 && segment < 52) {
+      start = 2.0f + static_cast<float>(segment - 32) / 10.0f;
+      width = 1.0f / 10.0f;
+    } else if (lut_entries == 64) {
+      start = 4.0f + static_cast<float>(segment - 52) / 6.0f;
+      width = 1.0f / 6.0f;
+    } else if (segment < 64) {
+      start = static_cast<float>(segment) / 32.0f;
+      width = 1.0f / 32.0f;
+    } else {
+      start = 2.0f + static_cast<float>(segment - 64) / 16.0f;
+      width = 1.0f / 16.0f;
+    }
     for (uint32_t local = 0; local < (1U << 16); ++local) {
       float input = start + width * static_cast<float>(local) * 0x1p-16f;
+      if (local == (1U << 15)) {
+        FilterOutput filtered =
+            SFUFilter::filter(bits(input), SFUOp::SIGMOID);
+        RangeReduceOutput reduced =
+            SFURangeReduce::reduce(filtered, SFUOp::SIGMOID);
+        if (reduced.index != segment) {
+          std::cerr << "segment " << segment << " is not reachable\n";
+          return false;
+        }
+      }
       float actual = SFUCore::compute(input, SFUOp::SIGMOID);
       float reference = sigmoid_reference(input);
       max_abs_error = std::max(
@@ -99,7 +123,7 @@ bool test_configuration(uint32_t lut_entries) {
   std::cout << "sigmoid " << lut_entries
             << "-entry max segment-boundary reversal: "
             << max_monotonic_reversal << '\n';
-  double accuracy_limit = lut_entries == 128 ? 3.1e-7 : 7.5e-7;
+  double accuracy_limit = lut_entries == 128 ? 3.1e-7 : 5.5e-7;
   if (max_abs_error > accuracy_limit) {
     std::cerr << "accuracy limit exceeded\n";
     ok = false;

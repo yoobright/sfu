@@ -29,7 +29,8 @@ PolyOutput SFUPoly::compute(const LUTOutput &input, SFUOp op) {
   int shift1 = params.shift1();
   int shift2 = params.shift2();
   if (op == SFUOp::SIGMOID && sigmoid_lut_entries == 64) {
-    // The 1/8 tail intervals need four times the C2 coefficient range.
+    // The nonuniform 64-entry layout needs four times the C2 coefficient
+    // range used by the default 128-entry layout.
     shift2 -= 2;
   }
 
