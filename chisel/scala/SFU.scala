@@ -49,7 +49,7 @@ object Function {
   val SQRT  = FunctionParams(6, 1,  1, -1, 0, -1, -3)
   val RSQRT = FunctionParams(6, 1, -1,  1, 0, -1, -1)
   val SIN   = FunctionParams(6, 1,  1,  -1, 0,  1, 1)
-  val SIGMOID = FunctionParams(7, 1, -1, 1, -1, 2, 3)
+  val SIGMOID = FunctionParams(7, 1, -1, 1, -1, 1, 1)
 
   def getShift0(op: UInt): UInt = {
     MuxLookup(op, 0.U(5.W)) (Seq(
@@ -318,8 +318,8 @@ class RangeReduce extends Module {
   val fracSin  = Mux(quadrant(0), fracPartInv , fracPart)
   val fracCos  = Mux(quadrant(0), fracPart    , fracPartInv)
 
-  // |x| / 16 as a 23-bit fraction. Values at or above 6 bypass in Filter.
-  val sigmoidArg = sigShifted(26, 4)
+  // |x| / 8 as a 23-bit fraction. Values at or above 6 bypass in Filter.
+  val sigmoidArg = sigShifted(25, 3)
 
   val signFinal = MuxLookup(op, sign.asUInt) (Seq(
     SFUOp.SIN -> signSin,

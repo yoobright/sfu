@@ -43,7 +43,7 @@ uint32_t float_bits(float value) {
 AccuracyStats measure(const Interval &interval) {
   AccuracyStats stats;
   for (uint32_t value = interval.begin; value < interval.end; ++value) {
-    float input = interval.reduced ? static_cast<float>(value) * 0x1p-19f
+    float input = interval.reduced ? static_cast<float>(value) * 0x1p-20f
                                    : from_bits(value);
     float actual = SFUCore::compute(input, SFUOp::SIGMOID);
     float reference = sigmoid_reference(input);
@@ -68,7 +68,7 @@ AccuracyStats measure(const Interval &interval) {
 
 int main() {
   constexpr std::array<Interval, 6> kIntervals = {{
-      {"[0, 0.25)", 0, 1U << 17, true},
+      {"[0, 0.25)", 0, 1U << 18, true},
       {"[0.25, 0.5)", 0x3E800000, 0x3F000000, false},
       {"[0.5, 1)", 0x3F000000, 0x3F800000, false},
       {"[1, 2)", 0x3F800000, 0x40000000, false},

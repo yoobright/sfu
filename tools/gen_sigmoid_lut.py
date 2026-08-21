@@ -20,15 +20,15 @@ from scipy.optimize import linprog
 NUM_SEGMENTS = 128
 LOCAL_VALUES = 1 << 16
 C0_SCALE = 2.0**-26
-C1_SCALE = 2.0**-13
-C2_SCALE = 2.0**-8
+C1_SCALE = 2.0**-14
+C2_SCALE = 2.0**-10
 XL = np.arange(LOCAL_VALUES, dtype=np.int64)
 XL2 = (XL * XL >> 17) & 0x7FFF
 
 
 def sigmoid_negative_abs(u: np.ndarray) -> np.ndarray:
-    """Return sigmoid(-16*u) for u in [0, 1)."""
-    return 1.0 / (1.0 + np.exp(16.0 * u))
+    """Return sigmoid(-8*u) for u in [0, 1)."""
+    return 1.0 / (1.0 + np.exp(8.0 * u))
 
 
 def minimax_quadratic(segment: int) -> np.ndarray:
@@ -60,7 +60,7 @@ def minimax_quadratic(segment: int) -> np.ndarray:
 def evaluate_segment(segment: int, coeffs: tuple[int, int, int]) -> float:
     c0, c1, c2 = coeffs
     # Arithmetic right shift of the negative C1 product rounds toward -inf.
-    fixed = c0 - ((c1 * XL + 0x3FF) >> 10) + (c2 * XL2 >> 11)
+    fixed = c0 - ((c1 * XL + 0x7FF) >> 11) + (c2 * XL2 >> 13)
     reduced = (segment * LOCAL_VALUES + XL) / float(1 << 23)
     reference = sigmoid_negative_abs(reduced)
     return float(np.max(np.abs(fixed / float(1 << 26) - reference)))
@@ -115,7 +115,7 @@ def enforce_boundary_monotonicity(
 
     def endpoint(coeffs: list[int]) -> int:
         c0, c1, c2 = coeffs
-        return c0 - ((c1 * xl + 0x3FF) >> 10) + (c2 * xl2 >> 11)
+        return c0 - ((c1 * xl + 0x7FF) >> 11) + (c2 * xl2 >> 13)
 
     for segment in range(NUM_SEGMENTS - 1):
         current = adjusted[segment]
@@ -178,7 +178,7 @@ def main() -> None:
             output.write(f"{c0:X} {c1:X} {c2:X}\n")
 
     print(f"wrote {len(all_coeffs)} segments to {args.output}")
-    print(f"maximum exhaustive absolute error on [0, 16): {maximum_error:.9e}")
+    print(f"maximum exhaustive absolute error on [0, 8): {maximum_error:.9e}")
 
 
 if __name__ == "__main__":

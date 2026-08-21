@@ -43,14 +43,15 @@ For **SIN/COS**, the functions computed are $\sin(\frac{\pi}{2} x)$ and $\cos(\f
 
 For **SIGMOID**, symmetry reduces the approximation to
 $h=\sigma(-|x|)$. The normalized argument
-$u=|x|/16$ is divided into 128 intervals. The LUT approximates $h(u)$ in
+$u=|x|/8$ is divided into 128 intervals. The LUT approximates $h(u)$ in
 unsigned Q0.26 using a positive $C_0$, negative $C_1$, and positive $C_2$;
 the compose stage returns $h$ for negative inputs and $1-h$ for non-negative
-inputs. Inputs with $|x|\ge6$ saturate to 0 or 1, so indices 0 through 47 are
+inputs. Inputs with $|x|\ge6$ saturate to 0 or 1, so indices 0 through 95 are
 reachable in the interpolated region. The coefficients are formed
 with a degree-2 minimax solve, finite-word quantization, compensation search,
-and exhaustive evaluation of all $2^{23}$ reduced inputs, following the
-enhanced-minimax procedure in \[1\]. Run `python3 tools/gen_sigmoid_lut.py` to
+and exhaustive evaluation of all $2^{23}$ reduced inputs over $[0,8)$,
+following the enhanced-minimax procedure in \[1\]. The maximum exhaustive
+fixed-point error is `5.823e-7`. Run `python3 tools/gen_sigmoid_lut.py` to
 reproduce `lut/sigmoid-coeffs.txt` (NumPy and SciPy are required).
 
 The final result is assembled by combining the polynomial output with the input exponent according to each function's composition rule.
@@ -71,7 +72,7 @@ S0: Filter (1 cycle)
 S1: RangeReduce (1 cycle)
     - EXP2/SIN/COS: Compute integer and fractional decomposition
     - SIN/COS: quadrant = floor(x) mod 4; map fractional part f to t = f or 1-f based on quadrant[0]; sign from quadrant[1]
-    - SIGMOID: map |x| to u=|x|/16 and split u into a 7-bit index plus 16-bit local argument
+    - SIGMOID: map |x| to u=|x|/8 and split u into a 7-bit index plus 16-bit local argument
     - LOG2/RCP/SQRT/RSQRT: Extract exponent and split mantissa into index + xl
     - SQRT/RSQRT: index[6] = E mod 2 (selects even/odd LUT)
     - Output: index (7 bits), xl (17 bits), exp (8 bits signed), sign (1 bit)
@@ -220,7 +221,7 @@ Coefficients are optimized offline using the `optimizer` tool to minimize the wo
 
 The experiment uses the same four positive intervals as the other functions,
 plus $[0,0.25)$ and $[4,6)$ to cover the complete non-saturated positive
-domain. For $[0,0.25)$, all 131,072 hardware-distinct Q0.23 reduced arguments
+domain. For $[0,0.25)$, all 262,144 hardware-distinct Q0.23 reduced arguments
 are evaluated; this avoids redundantly enumerating about 1.05 billion FP32
 encodings that collapse onto those reduced values. Every FP32 encoding is
 evaluated in each remaining half-open interval. The C model is compared with
@@ -228,12 +229,12 @@ the FP32 rounding of a double-precision sigmoid reference.
 
 | Interval | Implementation | MaxAbsErr | MaxULP | AvgAbsErr | AvgULP |
 |----------|---------------|-----------|--------|-----------|--------|
-| **[0, 0.25)** | This work | 2.682e-06 | **45** | 1.375e-06 | 23.07 |
-| **[0.25, 0.5)** | This work | 3.159e-06 | **53** | 1.347e-06 | 22.60 |
-| **[0.5, 1)** | This work | 2.265e-06 | **38** | 8.149e-07 | 13.67 |
-| **[1, 2)** | This work | 7.749e-07 | **13** | 2.031e-07 | 3.41 |
-| **[2, 4)** | This work | 6.557e-07 | **11** | 2.122e-07 | 3.56 |
-| **[4, 6)** | This work | 3.576e-07 | **6** | 8.283e-08 | 1.39 |
+| **[0, 0.25)** | This work | 5.960e-07 | **10** | 2.163e-07 | 3.63 |
+| **[0.25, 0.5)** | This work | 7.749e-07 | **13** | 2.168e-07 | 3.64 |
+| **[0.5, 1)** | This work | 7.153e-07 | **12** | 1.575e-07 | 2.64 |
+| **[1, 2)** | This work | 5.364e-07 | **9** | 1.001e-07 | 1.68 |
+| **[2, 4)** | This work | 5.364e-07 | **9** | 8.811e-08 | 1.48 |
+| **[4, 6)** | This work | 4.768e-07 | **8** | 4.991e-08 | 0.84 |
 
 Negative inputs are covered by the symmetry regression
 $\sigma(-x)=1-\sigma(x)$. At $|x|\ge6$, the output intentionally saturates to

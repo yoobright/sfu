@@ -60,13 +60,13 @@ int main() {
     ok = false;
   }
 
-  // |x| / 16 uses Q0.23, so [0, 6) contains 6 * 2^19 values.
-  constexpr uint32_t kReducedValues = 6U << 19;
+  // |x| / 8 uses Q0.23, so [0, 6) contains 6 * 2^20 values.
+  constexpr uint32_t kReducedValues = 6U << 20;
   double max_abs_error = 0.0;
   double max_monotonic_reversal = 0.0;
   float previous = 0.0f;
   for (uint32_t reduced = 0; reduced < kReducedValues; ++reduced) {
-    float input = static_cast<float>(reduced) * 0x1p-19f;
+    float input = static_cast<float>(reduced) * 0x1p-20f;
     float actual = SFUCore::compute(input, SFUOp::SIGMOID);
     float reference = sigmoid_reference(input);
     max_abs_error =
@@ -93,7 +93,7 @@ int main() {
   std::cout << "sigmoid max absolute error: " << max_abs_error << '\n';
   std::cout << "sigmoid max segment-boundary reversal: "
             << max_monotonic_reversal << '\n';
-  if (max_abs_error > 2.7e-6) {
+  if (max_abs_error > 6.1e-7) {
     std::cerr << "accuracy limit exceeded\n";
     ok = false;
   }
