@@ -42,15 +42,29 @@ For **EXP2**, the argument is decomposed as $x = I + F$ where $I = \lfloor x \rf
 For **SIN/COS**, the functions computed are $\sin(\frac{\pi}{2} x)$ and $\cos(\frac{\pi}{2} x)$. The period is 4, so `quadrant = floor(x) mod 4` is read from the two low bits of the integer part of $x$. The LUT stores coefficients for $\sin(\frac{\pi}{2} t)$ over $t \in [0, 1)$ with 64 sub-intervals. The fractional part $f \in [0, 1)$ is used for interpolation, and the quadrant determines whether to use $t = f$ or $t = 1 - f$ and the sign of the result.
 
 For **SIGMOID**, symmetry reduces the approximation to
-$h=\sigma(-|x|)$ over $|x|\in[0,16)$. The normalized argument
-$u=|x|/16$ is divided into 128 intervals. The LUT approximates $h(u)$ in
-unsigned Q0.26 using a positive $C_0$, negative $C_1$, and positive $C_2$;
-the compose stage returns $h$ for negative inputs and $1-h$ for non-negative
-inputs. Inputs with $|x|\ge16$ saturate to 0 or 1. The coefficients are formed
-with a degree-2 minimax solve, finite-word quantization, compensation search,
-and exhaustive evaluation of all $2^{23}$ reduced inputs, following the
-enhanced-minimax procedure in \[1\]. Run `python3 tools/gen_sigmoid_lut.py` to
-reproduce `lut/sigmoid-coeffs.txt` (NumPy and SciPy are required).
+$h(x)=\sigma(-|x|)$ on the positive magnitude axis. The LUT approximates
+$h$ in unsigned Q0.26 using a positive $C_0$, negative $C_1$, and positive
+$C_2$; the compose stage returns $h$ for negative inputs and $1-h$ for
+non-negative inputs. Inputs with $|x|\ge6$ intentionally saturate to 0 or 1.
+
+Like SIN's quadrant/range mapping, the default 128-entry SIGMOID uses simple
+comparisons and bit slices rather than a divider. The 64-entry area experiment
+uses shift-add scaling to move four entries from $[4,6)$ into the higher-error
+$[2,4)$ region. Every LUT entry is reachable:
+
+| Configuration | $[0,2)$ | $[2,4)$ | $[4,6)$ | Worst exhaustive fixed-point error |
+|---------------|-----------|-----------|-----------|------------------------------------|
+| 64 entries | 32 × $1/16$ | 20 × $1/10$ | 12 × $1/6$ | `4.337e-7` |
+| 128 entries (RTL default) | 64 × $1/32$ | 32 × $1/16$ | 32 × $1/16$ | `1.445e-7` |
+
+The coefficients are formed with a degree-2 minimax solve, finite-word
+quantization, compensation search, and exhaustive evaluation of all 65,536
+local fixed-point arguments in every interval, following the enhanced-minimax
+procedure in \[1\]. The wider intervals in the 64-entry experiment use a
+$2^{-22}$ $C_2$ scale; the default 128-entry table uses $2^{-24}$.
+Run `python3 tools/gen_sigmoid_lut.py --segments 64` and
+`python3 tools/gen_sigmoid_lut.py --segments 128` to reproduce both tables
+(NumPy and SciPy are required).
 
 The final result is assembled by combining the polynomial output with the input exponent according to each function's composition rule.
 
@@ -62,6 +76,7 @@ The final result is assembled by combining the polynomial output with the input 
 S0: Filter (1 cycle)
     - Handle special values: NaN, ±Inf, ±0, subnormals (treated as zero)
     - Handle out-of-range inputs for EXP2 (overflow/underflow)
+    - Saturate SIGMOID to 0 or 1 when |x| >= 6
     - Handle negative inputs for LOG2, SQRT, RSQRT
     - Output bypass flag and bypass value for special cases
     - Pass normal inputs to next stage
@@ -69,7 +84,7 @@ S0: Filter (1 cycle)
 S1: RangeReduce (1 cycle)
     - EXP2/SIN/COS: Compute integer and fractional decomposition
     - SIN/COS: quadrant = floor(x) mod 4; map fractional part f to t = f or 1-f based on quadrant[0]; sign from quadrant[1]
-    - SIGMOID: map |x| to u=|x|/16 and split u into a 7-bit index plus 16-bit local argument
+    - SIGMOID: split |x| at 2; select one of 128 intervals with bit slices and form a 16-bit local argument
     - LOG2/RCP/SQRT/RSQRT: Extract exponent and split mantissa into index + xl
     - SQRT/RSQRT: index[6] = E mod 2 (selects even/odd LUT)
     - Output: index (7 bits), xl (17 bits), exp (8 bits signed), sign (1 bit)
@@ -216,11 +231,39 @@ Coefficients are optimized offline using the `optimizer` tool to minimize the wo
 
 ### SIGMOID
 
-The coefficient generator exhaustively evaluates all $2^{23}$ reduced inputs
-over $[0,16)$. The maximum fixed-point interpolation absolute error is
-`2.648e-6`. Negative inputs use the exact symmetry reconstruction
-$\sigma(-x)=1-\sigma(x)$; special values and the saturated tails are checked
-separately. Run `make test-cmodel` for the exhaustive C-model regression.
+The experiment measures both the 64- and 128-entry configurations over the
+complete non-saturated positive domain. For $[0,0.25)$, it evaluates every
+hardware-distinct reduced argument: 262,144 for 64 entries and 524,288 for
+128 entries. This avoids redundantly enumerating FP32 encodings that collapse
+onto the same fixed-point argument. Every FP32 encoding is evaluated in each
+remaining half-open interval. The C model is compared with the FP32 rounding
+of a double-precision sigmoid reference.
+
+| Interval | Implementation | MaxAbsErr | MaxULP | AvgAbsErr | AvgULP |
+|----------|---------------|-----------|--------|-----------|--------|
+| **[0, 0.25)** | 64 entries | 3.576e-07 | 6 | 1.370e-07 | 2.30 |
+| | 128 entries | 1.788e-07 | **3** | 4.803e-08 | 0.81 |
+| **[0.25, 0.5)** | 64 entries | 4.768e-07 | 8 | 1.682e-07 | 2.82 |
+| | 128 entries | 2.980e-07 | **5** | 9.458e-08 | 1.59 |
+| **[0.5, 1)** | 64 entries | 4.172e-07 | 7 | 1.222e-07 | 2.05 |
+| | 128 entries | 2.384e-07 | **4** | 6.989e-08 | 1.17 |
+| **[1, 2)** | 64 entries | 2.980e-07 | 5 | 9.369e-08 | 1.57 |
+| | 128 entries | 1.788e-07 | **3** | 4.527e-08 | 0.76 |
+| **[2, 4)** | 64 entries | 4.768e-07 | 8 | 1.226e-07 | 2.06 |
+| | 128 entries | 2.384e-07 | **4** | 5.318e-08 | 0.89 |
+| **[4, 6)** | 64 entries | 4.768e-07 | 8 | 1.109e-07 | 1.86 |
+| | 128 entries | 1.788e-07 | **3** | 2.804e-08 | 0.47 |
+
+The 128-entry configuration has a worst case of 5 ULP across all measured
+intervals. Reallocating four of the 64-entry tail segments reduces its worst
+case from 12 to 8 ULP; it is retained as the area/accuracy comparison point.
+The RTL and optimizer use 128 entries by default.
+
+Negative inputs are covered by the symmetry regression
+$\sigma(-x)=1-\sigma(x)$. At $|x|\ge6$, the output intentionally saturates to
+0 or 1 and is therefore outside the interpolation-accuracy experiment. Run
+`make accuracy-sigmoid` to reproduce the table and `make test-cmodel` for the
+reduced-domain, symmetry, boundary, and special-value regression.
 
 ### NVIDIA PTX ISA Specification Compliance
 

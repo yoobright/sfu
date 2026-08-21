@@ -1,5 +1,15 @@
 #include "sfu_range_reduce.h"
 #include <cstdio>
+#include <stdexcept>
+
+uint32_t SFURangeReduce::sigmoid_lut_entries = 128;
+
+void SFURangeReduce::configure_sigmoid(uint32_t lut_entries) {
+  if (lut_entries != 64 && lut_entries != 128) {
+    throw std::invalid_argument("sigmoid LUT must contain 64 or 128 entries");
+  }
+  sigmoid_lut_entries = lut_entries;
+}
 
 RangeReduceOutput SFURangeReduce::reduce(const FilterOutput &input, SFUOp op) {
   RangeReduceOutput out;
@@ -29,10 +39,6 @@ RangeReduceOutput SFURangeReduce::reduce(const FilterOutput &input, SFUOp op) {
   uint32_t frac_part_floor = (input.sign && frac_part != 0)
                                  ? ((frac_part_inv + 1) & 0x7FFFFF)
                                  : frac_part;
-  // sigmoid_arg is |x| / 16 represented as a 23-bit fraction.  Inputs with
-  // |x| >= 16 have already been saturated by the filter stage.
-  uint32_t sigmoid_arg = (sig_shifted >> 4) & 0x7FFFFF;
-
   uint8_t quadrand = int_part & 0x3;
 
   out.sign = input.sign;
@@ -116,8 +122,42 @@ RangeReduceOutput SFURangeReduce::reduce(const FilterOutput &input, SFUOp op) {
     break;
   case SFUOp::SIGMOID:
     out.exp = 0;
-    out.index = (sigmoid_arg >> 16) & 0x7F;
-    out.xl = sigmoid_arg & 0xFFFF;
+    // Select a region and split the local coordinate into a table index and a
+    // 16-bit fraction.  The default 128-entry layout uses power-of-two bit
+    // slices; the 64-entry experiment uses shift-add scaling.  All entries
+    // are reachable before the |x| >= 6 saturation boundary.
+    if (sigmoid_lut_entries == 128) {
+      if (int_part < 2) {
+        // [0, 2): 64 intervals of width 1/32.
+        out.index = (sig_shifted >> 18) & 0x3F;
+        out.xl = (sig_shifted >> 2) & 0xFFFF;
+      } else {
+        // [2, 6): 64 intervals of width 1/16.
+        out.index = 64 + (((sig_shifted >> 19) & 0x7F) - 32);
+        out.xl = (sig_shifted >> 3) & 0xFFFF;
+      }
+    } else {
+      // The 64-entry experiment gives [2, 4) more entries, where the
+      // quadratic approximation previously reached its worst error.
+      uint64_t scaled;
+      if (int_part < 2) {
+        // [0, 2): 32 intervals of width 1/16.
+        out.index = (sig_shifted >> 19) & 0x1F;
+        out.xl = (sig_shifted >> 3) & 0xFFFF;
+      } else if (int_part < 4) {
+        // [2, 4): 20 intervals of width 1/10.
+        uint64_t delta = sig_shifted - (2U << 23);
+        scaled = (delta << 3) + (delta << 1);
+        out.index = 32 + ((scaled >> 23) & 0x1F);
+        out.xl = (scaled >> 7) & 0xFFFF;
+      } else {
+        // [4, 6): 12 intervals of width 1/6.
+        uint64_t delta = sig_shifted - (4U << 23);
+        scaled = (delta << 2) + (delta << 1);
+        out.index = 52 + ((scaled >> 23) & 0xF);
+        out.xl = (scaled >> 7) & 0xFFFF;
+      }
+    }
     break;
   default:
     break;

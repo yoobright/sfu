@@ -1,4 +1,6 @@
 #include "sfu_core.h"
+#include "sfu_filter.h"
+#include "sfu_range_reduce.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -33,16 +35,24 @@ bool check_special(float input, uint32_t expected) {
 
 } // namespace
 
-int main() {
-  SFUCore::init();
-
+bool test_configuration(uint32_t lut_entries) {
+  SFUCore::init(lut_entries);
   bool ok = true;
   ok &= check_special(0.0f, 0x3F000000);
   ok &= check_special(-0.0f, 0x3F000000);
   ok &= check_special(std::numeric_limits<float>::infinity(), 0x3F800000);
   ok &= check_special(-std::numeric_limits<float>::infinity(), 0x00000000);
-  ok &= check_special(16.0f, 0x3F800000);
-  ok &= check_special(-16.0f, 0x00000000);
+  ok &= check_special(6.0f, 0x3F800000);
+  ok &= check_special(-6.0f, 0x00000000);
+
+  float below_saturation = std::nextafter(6.0f, 0.0f);
+  if (bits(SFUCore::compute(below_saturation, SFUOp::SIGMOID)) ==
+          0x3F800000 ||
+      bits(SFUCore::compute(-below_saturation, SFUOp::SIGMOID)) ==
+          0x00000000) {
+    std::cerr << "sigmoid saturated below |x| = 6\n";
+    ok = false;
+  }
 
   float nan_result = SFUCore::compute(std::numeric_limits<float>::quiet_NaN(),
                                       SFUOp::SIGMOID);
@@ -51,39 +61,70 @@ int main() {
     ok = false;
   }
 
-  constexpr uint32_t kReducedValues = 1U << 23;
   double max_abs_error = 0.0;
   double max_monotonic_reversal = 0.0;
   float previous = 0.0f;
-  for (uint32_t reduced = 0; reduced < kReducedValues; ++reduced) {
-    float input = static_cast<float>(reduced) * 0x1p-19f;
-    float actual = SFUCore::compute(input, SFUOp::SIGMOID);
-    float reference = sigmoid_reference(input);
-    max_abs_error =
-        std::max(max_abs_error, std::abs(static_cast<double>(actual) - reference));
-
-    if (reduced != 0 && actual < previous) {
-      max_monotonic_reversal =
-          std::max(max_monotonic_reversal,
-                   static_cast<double>(previous) - actual);
+  for (uint32_t segment = 0; segment < lut_entries; ++segment) {
+    float start;
+    float width;
+    if (lut_entries == 64 && segment < 32) {
+      start = static_cast<float>(segment) / 16.0f;
+      width = 1.0f / 16.0f;
+    } else if (lut_entries == 64 && segment < 52) {
+      start = 2.0f + static_cast<float>(segment - 32) / 10.0f;
+      width = 1.0f / 10.0f;
+    } else if (lut_entries == 64) {
+      start = 4.0f + static_cast<float>(segment - 52) / 6.0f;
+      width = 1.0f / 6.0f;
+    } else if (segment < 64) {
+      start = static_cast<float>(segment) / 32.0f;
+      width = 1.0f / 32.0f;
+    } else {
+      start = 2.0f + static_cast<float>(segment - 64) / 16.0f;
+      width = 1.0f / 16.0f;
     }
-    previous = actual;
+    for (uint32_t local = 0; local < (1U << 16); ++local) {
+      float input = start + width * static_cast<float>(local) * 0x1p-16f;
+      if (local == (1U << 15)) {
+        FilterOutput filtered =
+            SFUFilter::filter(bits(input), SFUOp::SIGMOID);
+        RangeReduceOutput reduced =
+            SFURangeReduce::reduce(filtered, SFUOp::SIGMOID);
+        if (reduced.index != segment) {
+          std::cerr << "segment " << segment << " is not reachable\n";
+          return false;
+        }
+      }
+      float actual = SFUCore::compute(input, SFUOp::SIGMOID);
+      float reference = sigmoid_reference(input);
+      max_abs_error = std::max(
+          max_abs_error, std::abs(static_cast<double>(actual) - reference));
 
-    if ((reduced & 0xFFF) == 0) {
-      float negative = SFUCore::compute(-input, SFUOp::SIGMOID);
-      if (std::abs((static_cast<double>(actual) + negative) - 1.0) >
-          1.2e-7) {
-        std::cerr << "symmetry failed at input=" << input << '\n';
-        ok = false;
-        break;
+      if ((segment != 0 || local != 0) && actual < previous) {
+        max_monotonic_reversal =
+            std::max(max_monotonic_reversal,
+                     static_cast<double>(previous) - actual);
+      }
+      previous = actual;
+
+      if ((local & 0xFFF) == 0) {
+        float negative = SFUCore::compute(-input, SFUOp::SIGMOID);
+        if (std::abs((static_cast<double>(actual) + negative) - 1.0) >
+            1.2e-7) {
+          std::cerr << "symmetry failed at input=" << input << '\n';
+          return false;
+        }
       }
     }
   }
 
-  std::cout << "sigmoid max absolute error: " << max_abs_error << '\n';
-  std::cout << "sigmoid max segment-boundary reversal: "
+  std::cout << "sigmoid " << lut_entries
+            << "-entry max absolute error: " << max_abs_error << '\n';
+  std::cout << "sigmoid " << lut_entries
+            << "-entry max segment-boundary reversal: "
             << max_monotonic_reversal << '\n';
-  if (max_abs_error > 2.7e-6) {
+  double accuracy_limit = lut_entries == 128 ? 3.1e-7 : 5.5e-7;
+  if (max_abs_error > accuracy_limit) {
     std::cerr << "accuracy limit exceeded\n";
     ok = false;
   }
@@ -93,5 +134,11 @@ int main() {
     ok = false;
   }
 
+  return ok;
+}
+
+int main() {
+  bool ok = test_configuration(64);
+  ok &= test_configuration(128);
   return ok ? 0 : 1;
 }

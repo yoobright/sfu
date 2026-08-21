@@ -7,6 +7,7 @@ VERILATOR_ROOT := $(shell command -v verilator >/dev/null 2>&1 && verilator --ge
 BUILD_DIR = build
 TARGET    = $(BUILD_DIR)/sfu_test
 SIGMOID_TEST = $(BUILD_DIR)/sigmoid_test
+SIGMOID_ACCURACY = $(BUILD_DIR)/sigmoid_accuracy
 
 VERILATOR_SRCS = $(VERILATOR_ROOT)/include/verilated.cpp $(VERILATOR_ROOT)/include/verilated_threads.cpp
 
@@ -40,6 +41,13 @@ all: run
 test-cmodel: $(SIGMOID_TEST)
 	@LUT_PATH=./lut ./$(SIGMOID_TEST)
 
+accuracy-sigmoid: $(SIGMOID_ACCURACY)
+	@LUT_PATH=./lut ./$(SIGMOID_ACCURACY)
+
+generate-sigmoid-luts:
+	python3 tools/gen_sigmoid_lut.py --segments 64
+	python3 tools/gen_sigmoid_lut.py --segments 128
+
 run: $(TARGET)
 	@LUT_PATH=./lut ./$(TARGET)
 
@@ -67,6 +75,9 @@ $(TARGET): main.cpp $(LIBS) | $(BUILD_DIR)
 $(SIGMOID_TEST): tests/sigmoid_test.cpp cmodel/build/libcmodel.a | $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS) -I./cmodel/include -o $@ $< cmodel/build/libcmodel.a
 
+$(SIGMOID_ACCURACY): tests/sigmoid_accuracy.cpp cmodel/build/libcmodel.a | $(BUILD_DIR)
+	$(CXX) $(CXXFLAGS) -I./cmodel/include -o $@ $< cmodel/build/libcmodel.a
+
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
 
@@ -74,4 +85,4 @@ clean:
 	rm -rf $(BUILD_DIR)
 	for dir in $(SUBDIRS); do $(MAKE) -C $$dir clean; done
 
-.PHONY: all clean test-cmodel $(SUBDIRS)
+.PHONY: all clean test-cmodel accuracy-sigmoid generate-sigmoid-luts $(SUBDIRS)

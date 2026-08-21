@@ -9,7 +9,11 @@
 
 static constexpr float INV_PI_2 = 2.0f / static_cast<float>(M_PI);
 
-void SFUCore::init() { SFULUT::init(); }
+void SFUCore::init(uint32_t sigmoid_lut_entries) {
+  SFURangeReduce::configure_sigmoid(sigmoid_lut_entries);
+  SFUPoly::configure_sigmoid(sigmoid_lut_entries);
+  SFULUT::init(sigmoid_lut_entries);
+}
 
 float SFUCore::compute(float input, SFUOp op) {
 
