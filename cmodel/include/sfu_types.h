@@ -11,7 +11,8 @@ enum class SFUOp {
   SQRT = 3,
   RSQRT = 4,
   SIN = 5,
-  COS = 6
+  COS = 6,
+  SIGMOID = 7
 };
 
 struct SFUConfig {
@@ -51,6 +52,7 @@ public:
   static const FunctionParams SQRT;
   static const FunctionParams RSQRT;
   static const FunctionParams SIN;
+  static const FunctionParams SIGMOID;
 
   static const FunctionParams &get(SFUOp op);
 };

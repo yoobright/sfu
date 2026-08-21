@@ -81,9 +81,10 @@ module Filter(	// scala/SFU.scala:180:7
   wire             _tooNeg_T = io_in_bits_x[30:23] > 8'h85;	// scala/SFU.scala:187:23, :195:27
   wire             tooBig = ~(io_in_bits_x[31]) & _tooNeg_T;	// scala/SFU.scala:186:23, :195:{17,21,27}
   wire             _GEN = isInf | isNaN;	// scala/SFU.scala:191:34, :192:34, src/main/scala/chisel3/util/Mux.scala:126:16
+  wire             sigmoidSaturate = io_in_bits_x[30:23] > 8'h82;
   wire             _GEN_0 = io_in_bits_op == 3'h6 & (isZero | isInf | isNaN);	// scala/SFU.scala:190:21, :191:34, :192:34, :248:{28,43}, :249:{15,34}, :256:15
   wire [7:0]       _GEN_1 =
-    {{_GEN_0},
+    {{isZero | isInf | isNaN | sigmoidSaturate},
      {_GEN_0},
      {isZero | isInf | isNaN},
      {io_in_bits_x[31] | isZero | isInf | isNaN},
@@ -92,7 +93,13 @@ module Filter(	// scala/SFU.scala:180:7
      {io_in_bits_x[31] | isZero | isInf | isNaN},
      {isZero | isInf | isNaN | tooBig | io_in_bits_x[31] & _tooNeg_T}};	// scala/SFU.scala:186:23, :190:21, :191:34, :192:34, :195:{21,27}, :196:21, :201:{22,38}, :202:{15,53}, :210:{28,44}, :211:{15,43}, :218:{28,43}, :219:{15,34}, :225:{28,44}, :226:{15,43}, :233:{28,45}, :234:{15,43}, :241:{28,43}, :242:{15,34}, :248:43, :249:15, :256:15
   wire [7:0][31:0] _GEN_2 =
-    {{32'h0},
+    {{isZero
+        ? 32'h3F000000
+        : isInf
+            ? (io_in_bits_x[31] ? 32'h0 : 32'h3F800000)
+            : isNaN
+                ? 32'h7FFFFFFF
+                : (io_in_bits_x[31] ? 32'h0 : 32'h3F800000)},
      {isZero | ~_GEN ? 32'h3F800000 : 32'h7FFFFFFF},
      {isZero ? {io_in_bits_x[31], 31'h0} : _GEN ? 32'h7FFFFFFF : 32'h0},
      {io_in_bits_x[31]
@@ -214,7 +221,7 @@ module RangeReduce(	// scala/SFU.scala:275:7
   wire             _xl_T_20 = io_in_bits_op == 3'h6;	// scala/SFU.scala:307:46
   wire [31:0]      _GEN = {15'h0, io_in_bits_mantissa[16:0]};	// scala/SFU.scala:332:37, :334:28
   wire [7:0][6:0]  _GEN_0 =
-    {{7'h0},
+    {{sigShifted[26:20]},
      {{1'h0, fracCos[22:17]}},
      {{1'h0, fracSin[22:17]}},
      {{_expSigned_T_1[0], io_in_bits_mantissa[22:17]}},
@@ -223,7 +230,7 @@ module RangeReduce(	// scala/SFU.scala:275:7
      {{1'h0, io_in_bits_mantissa[22:17]}},
      {{1'h0, fracPartFloor[22:17]}}};	// scala/SFU.scala:288:36, :289:26, :291:33, :297:26, :304:21, :305:21, :307:46, :312:37, :322:39, :323:{23,47}, :324:{23,42}, :325:28, :326:{23,33}, :327:23, :328:{23,41}, :329:{23,41}
   wire [7:0][31:0] _GEN_1 =
-    {{32'h0},
+    {{16'h0, sigShifted[19:4]},
      {{15'h0, fracCos[16:0]}},
      {{15'h0, fracSin[16:0]}},
      {_GEN},
@@ -2088,8 +2095,398 @@ module LookupTable(	// scala/SFU.scala:357:7
   wire [26:0]        _GEN_23 = _GEN_1[io_in_bits_index[5:0]];	// scala/SFU.scala:407:43, :408:33
   wire [16:0]        _GEN_24 = _GEN_0[io_in_bits_index[5:0]];	// scala/SFU.scala:407:43, :408:33
   wire [12:0]        _GEN_25 = _GEN[io_in_bits_index[5:0]];	// scala/SFU.scala:407:43, :408:33
+  wire [127:0][12:0] sigmoidC2 =
+    '{
+      13'h0,
+      13'h0,
+      13'h0,
+      13'h0,
+      13'h0,
+      13'h0,
+      13'h0,
+      13'h0,
+      13'h0,
+      13'h0,
+      13'h0,
+      13'h0,
+      13'h0,
+      13'h0,
+      13'h0,
+      13'h0,
+      13'h0,
+      13'h0,
+      13'h0,
+      13'h0,
+      13'h0,
+      13'h0,
+      13'h0,
+      13'h0,
+      13'h0,
+      13'h0,
+      13'h0,
+      13'h0,
+      13'h2,
+      13'h2,
+      13'h2,
+      13'h2,
+      13'h1,
+      13'h1,
+      13'h0,
+      13'h0,
+      13'h2,
+      13'h2,
+      13'h1,
+      13'h1,
+      13'h0,
+      13'h1,
+      13'h1,
+      13'h3,
+      13'h2,
+      13'h3,
+      13'h2,
+      13'h1,
+      13'h3,
+      13'h4,
+      13'h4,
+      13'h4,
+      13'h3,
+      13'h4,
+      13'h4,
+      13'h4,
+      13'h4,
+      13'h6,
+      13'h8,
+      13'h8,
+      13'h8,
+      13'h8,
+      13'hA,
+      13'hC,
+      13'hD,
+      13'hD,
+      13'h10,
+      13'h10,
+      13'h14,
+      13'h17,
+      13'h19,
+      13'h1C,
+      13'h20,
+      13'h25,
+      13'h28,
+      13'h2E,
+      13'h37,
+      13'h3D,
+      13'h43,
+      13'h4C,
+      13'h57,
+      13'h61,
+      13'h6F,
+      13'h7B,
+      13'h8A,
+      13'h9F,
+      13'hB3,
+      13'hCA,
+      13'hE3,
+      13'h102,
+      13'h124,
+      13'h14A,
+      13'h172,
+      13'h1A0,
+      13'h1D4,
+      13'h20E,
+      13'h250,
+      13'h298,
+      13'h2E7,
+      13'h33F,
+      13'h3A1,
+      13'h40A,
+      13'h47E,
+      13'h4F9,
+      13'h580,
+      13'h60F,
+      13'h6A9,
+      13'h74A,
+      13'h7F0,
+      13'h89A,
+      13'h944,
+      13'h9EB,
+      13'hA89,
+      13'hB1C,
+      13'hB99,
+      13'hBFA,
+      13'hC3B,
+      13'hC52,
+      13'hC33,
+      13'hBE0,
+      13'hB4F,
+      13'hA80,
+      13'h96D,
+      13'h81D,
+      13'h690,
+      13'h4D6,
+      13'h2F8,
+      13'h102};
+  wire [127:0][16:0] sigmoidC1 =
+    '{
+      17'h0,
+      17'h0,
+      17'h0,
+      17'h0,
+      17'h0,
+      17'h0,
+      17'h0,
+      17'h0,
+      17'h0,
+      17'h0,
+      17'h0,
+      17'h0,
+      17'h0,
+      17'h0,
+      17'h0,
+      17'h0,
+      17'h0,
+      17'h0,
+      17'h0,
+      17'h0,
+      17'h0,
+      17'h0,
+      17'h0,
+      17'h0,
+      17'h0,
+      17'h0,
+      17'h0,
+      17'h0,
+      17'h1FFFF,
+      17'h1FFFF,
+      17'h1FFFF,
+      17'h1FFFF,
+      17'h1FFFF,
+      17'h1FFFF,
+      17'h1FFFF,
+      17'h1FFFF,
+      17'h1FFFE,
+      17'h1FFFE,
+      17'h1FFFE,
+      17'h1FFFE,
+      17'h1FFFE,
+      17'h1FFFD,
+      17'h1FFFD,
+      17'h1FFFC,
+      17'h1FFFC,
+      17'h1FFFB,
+      17'h1FFFB,
+      17'h1FFFA,
+      17'h1FFF9,
+      17'h1FFF8,
+      17'h1FFF7,
+      17'h1FFF6,
+      17'h1FFF5,
+      17'h1FFF3,
+      17'h1FFF2,
+      17'h1FFF0,
+      17'h1FFEE,
+      17'h1FFEB,
+      17'h1FFE8,
+      17'h1FFE5,
+      17'h1FFE2,
+      17'h1FFDE,
+      17'h1FFD9,
+      17'h1FFD4,
+      17'h1FFCE,
+      17'h1FFC8,
+      17'h1FFC0,
+      17'h1FFB8,
+      17'h1FFAE,
+      17'h1FFA3,
+      17'h1FF97,
+      17'h1FF89,
+      17'h1FF79,
+      17'h1FF67,
+      17'h1FF53,
+      17'h1FF3C,
+      17'h1FF21,
+      17'h1FF04,
+      17'h1FEE3,
+      17'h1FEBD,
+      17'h1FE92,
+      17'h1FE62,
+      17'h1FE2B,
+      17'h1FDEE,
+      17'h1FDA8,
+      17'h1FD58,
+      17'h1FCFF,
+      17'h1FC9A,
+      17'h1FC28,
+      17'h1FBA7,
+      17'h1FB15,
+      17'h1FA71,
+      17'h1F9B9,
+      17'h1F8E9,
+      17'h1F7FF,
+      17'h1F6F8,
+      17'h1F5D0,
+      17'h1F485,
+      17'h1F312,
+      17'h1F173,
+      17'h1EFA3,
+      17'h1ED9F,
+      17'h1EB61,
+      17'h1E8E5,
+      17'h1E625,
+      17'h1E31D,
+      17'h1DFC8,
+      17'h1DC23,
+      17'h1D82B,
+      17'h1D3DE,
+      17'h1CF3C,
+      17'h1CA46,
+      17'h1C501,
+      17'h1BF72,
+      17'h1B9A5,
+      17'h1B3A7,
+      17'h1AD88,
+      17'h1A75E,
+      17'h1A143,
+      17'h19B50,
+      17'h195A7,
+      17'h19065,
+      17'h18BAD,
+      17'h1879D,
+      17'h18454,
+      17'h181E7,
+      17'h1806A,
+      17'h17FEB};
+  wire [127:0][26:0] sigmoidC0 =
+    '{
+      27'h8,
+      27'h9,
+      27'hA,
+      27'hC,
+      27'hD,
+      27'hF,
+      27'h11,
+      27'h13,
+      27'h16,
+      27'h19,
+      27'h1C,
+      27'h20,
+      27'h24,
+      27'h29,
+      27'h2E,
+      27'h35,
+      27'h3C,
+      27'h43,
+      27'h4C,
+      27'h57,
+      27'h62,
+      27'h6F,
+      27'h7E,
+      27'h8F,
+      27'hA2,
+      27'hB7,
+      27'hD0,
+      27'hEB,
+      27'h11F,
+      27'h147,
+      27'h170,
+      27'h19F,
+      27'h1D8,
+      27'h213,
+      27'h255,
+      27'h2A0,
+      27'h308,
+      27'h36F,
+      27'h3E3,
+      27'h45F,
+      27'h4EC,
+      27'h5A4,
+      27'h65E,
+      27'h73D,
+      27'h82C,
+      27'h94B,
+      27'hA7B,
+      27'hBED,
+      27'hD82,
+      27'hF4C,
+      27'h1156,
+      27'h13A2,
+      27'h1636,
+      27'h1938,
+      27'h1C87,
+      27'h2053,
+      27'h24A1,
+      27'h298B,
+      27'h2F16,
+      27'h355B,
+      27'h3C69,
+      27'h4473,
+      27'h4D99,
+      27'h57E9,
+      27'h63A4,
+      27'h70DC,
+      27'h7FE3,
+      27'h90E6,
+      27'hA42D,
+      27'hBA06,
+      27'hD2C2,
+      27'hEECF,
+      27'h10E97,
+      27'h1328F,
+      27'h15B57,
+      27'h18980,
+      27'h1BDDD,
+      27'h1F919,
+      27'h23C2B,
+      27'h28831,
+      27'h2DE44,
+      27'h33FB9,
+      27'h3AE11,
+      27'h42AF0,
+      27'h4B859,
+      27'h55870,
+      27'h60D8B,
+      27'h6DA76,
+      27'h7C24E,
+      27'h8C87F,
+      27'h9F10B,
+      27'hB402D,
+      27'hCBAD6,
+      27'hE66AA,
+      27'h1049BB,
+      27'h126AEF,
+      27'h14D201,
+      27'h178752,
+      27'h1A9482,
+      27'h1E03F4,
+      27'h21E146,
+      27'h2638FB,
+      27'h2B18FC,
+      27'h309052,
+      27'h36AF43,
+      27'h3D8740,
+      27'h452ADF,
+      27'h4DADAE,
+      27'h57241C,
+      27'h61A330,
+      27'h6D402C,
+      27'h7A1039,
+      27'h8827A6,
+      27'h97999F,
+      27'hA876F4,
+      27'hBACDB2,
+      27'hCEA81C,
+      27'hE40B86,
+      27'hFAF790,
+      27'h113657A,
+      27'h12D46D2,
+      27'h148858E,
+      27'h165036B,
+      27'h1829A45,
+      27'h1A11C42,
+      27'h1C05518,
+      27'h1E00AFC,
+      27'h2000000};
   wire [7:0][26:0]   _GEN_26 =
-    {{_GEN_7[io_in_bits_index]},
+    {{sigmoidC0[io_in_bits_index]},
      {_GEN_23},
      {_GEN_23},
      {io_in_bits_index[6]
@@ -2102,7 +2499,7 @@ module LookupTable(	// scala/SFU.scala:357:7
      {_GEN_4[io_in_bits_index[5:0]]},
      {_GEN_10[io_in_bits_index[5:0]]}};	// scala/SFU.scala:407:43, :408:33, :411:{23,29}, :412:23
   wire [7:0][16:0]   _GEN_27 =
-    {{_GEN_6[io_in_bits_index]},
+    {{sigmoidC1[io_in_bits_index]},
      {_GEN_24},
      {_GEN_24},
      {io_in_bits_index[6]
@@ -2115,7 +2512,7 @@ module LookupTable(	// scala/SFU.scala:357:7
      {_GEN_3[io_in_bits_index[5:0]]},
      {_GEN_9[io_in_bits_index[5:0]]}};	// scala/SFU.scala:407:43, :408:33, :411:{23,29}, :412:23
   wire [7:0][12:0]   _GEN_28 =
-    {{_GEN_5[io_in_bits_index]},
+    {{sigmoidC2[io_in_bits_index]},
      {_GEN_25},
      {_GEN_25},
      {io_in_bits_index[6]
@@ -2249,7 +2646,7 @@ module Poly(	// scala/SFU.scala:435:7
     >> (io_in_bits_op == 3'h6 | io_in_bits_op == 3'h5 | io_in_bits_op == 3'h4
         | io_in_bits_op == 3'h3
           ? 5'h13
-          : io_in_bits_op == 3'h2
+          : io_in_bits_op == 3'h7 | io_in_bits_op == 3'h2
               ? 5'h11
               : io_in_bits_op == 3'h1 | io_in_bits_op == 3'h0 ? 5'h13 : 5'h0);	// scala/SFU.scala:53:29, :442:32, :444:23
   wire        _shift2_T = s2Pipe_rBits_op == 3'h0;	// scala/SFU.scala:53:29, :65:29, :110:25
@@ -2258,10 +2655,13 @@ module Poly(	// scala/SFU.scala:435:7
   wire        _shift2_T_6 = s2Pipe_rBits_op == 3'h3;	// scala/SFU.scala:53:29, :65:29, :110:25
   wire        _shift2_T_8 = s2Pipe_rBits_op == 3'h4;	// scala/SFU.scala:53:29, :65:29, :110:25
   wire        _GEN_0 = s2Pipe_rBits_op == 3'h6 | s2Pipe_rBits_op == 3'h5;	// scala/SFU.scala:53:29, :65:29, :110:25
+  wire        _sigmoidOp = s2Pipe_rBits_op == 3'h7;
   wire [28:0] aligned2 =
     $signed($signed(s2Pipe_rBits_c2Xl2)
-            >>> (_GEN_0
-                   ? 5'hC
+            >>> (_sigmoidOp
+                   ? 5'hB
+                   : _GEN_0
+                       ? 5'hC
                    : _shift2_T_8
                        ? 5'hE
                        : _shift2_T_6
@@ -2271,8 +2671,10 @@ module Poly(	// scala/SFU.scala:435:7
                                : _shift2_T_2 ? 5'hD : _shift2_T ? 5'hF : 5'h0));	// scala/SFU.scala:53:29, :65:29, :76:29, :110:25, :508:37
   wire [34:0] aligned1 =
     $signed($signed(s2Pipe_rBits_c1Xl)
-            >>> (_GEN_0
-                   ? 5'hC
+            >>> (_sigmoidOp
+                   ? 5'hA
+                   : _GEN_0
+                       ? 5'hC
                    : _shift2_T_8 | _shift2_T_6
                        ? 5'hE
                        : _shift2_T_4
@@ -2400,8 +2802,14 @@ module Compose(	// scala/SFU.scala:527:7
   reg              s1Pipe_rValid;	// scala/SFU.scala:109:29
   reg  [31:0]      s1Pipe_rBits_result;	// scala/SFU.scala:110:25
   wire             s1_ready = ~s1Pipe_rValid | io_out_ready;	// scala/SFU.scala:109:29, :111:{35,43}
-  wire [33:0]      sum = {io_in_bits_exp, io_in_bits_polyResult[25:0]};	// scala/SFU.scala:538:{20,43}
-  wire [33:0]      sumAbs = io_in_bits_exp[7] ? ~sum + 34'h1 : sum;	// scala/SFU.scala:538:20, :539:{20,24,30,35}
+  wire [26:0]      sigmoidFixed =
+    io_in_bits_sign ? io_in_bits_polyResult : 27'h4000000 - io_in_bits_polyResult;
+  wire [33:0]      sum =
+    io_in_bits_op == 3'h7
+      ? {7'h0, sigmoidFixed}
+      : {io_in_bits_exp, io_in_bits_polyResult[25:0]};
+  wire [33:0]      sumAbs =
+    io_in_bits_op == 3'h7 ? sum : io_in_bits_exp[7] ? ~sum + 34'h1 : sum;
   wire [7:0]       _GEN =
     {{sumAbs[11:8], sumAbs[15:14]} & 6'h33, 2'h0} | {sumAbs[15:12], sumAbs[19:16]}
     & 8'h33;	// scala/SFU.scala:527:7, :539:20, :540:40
@@ -2490,7 +2898,7 @@ module Compose(	// scala/SFU.scala:527:7
   wire [30:0]      _GEN_4 =
     io_in_bits_polyResult[26] ? 31'h3F800000 : {_expSin_T, _mantSin_T[32:10]};	// scala/SFU.scala:543:30, :544:26, :547:33, :567:{23,34,43,78}
   wire [7:0][31:0] _GEN_5 =
-    {{32'h0},
+    {{{1'h0, _expSin_T, _mantSin_T[32:10]}},
      {{io_in_bits_sign, _GEN_4}},
      {{io_in_bits_sign, _GEN_4}},
      {{1'h0, _expRsqrt_T, io_in_bits_polyResult[24:2]}},
@@ -2682,4 +3090,3 @@ module SFU(	// scala/SFU.scala:580:7
     .io_out_bits_result    (io_out_bits_result)
   );
 endmodule
-

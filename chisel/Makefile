@@ -24,7 +24,7 @@ all: $(TARGET)
 
 verilog: $(VERILOG)
 
-$(VERILOG):
+$(VERILOG): scala/SFU.scala $(wildcard ../lut/*-coeffs.txt)
 	@LUT_PATH=../lut $(MILL) --no-server SFU.run
 
 verilate: $(OBJ_DIR)/VSFU__ALL.o

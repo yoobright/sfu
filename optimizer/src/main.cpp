@@ -21,7 +21,8 @@ void print_usage() {
     printf("  optimizer optimize-all --input-dir <dir> --output-dir <dir> --cache-dir <dir>\n");
     printf("    [--c0] [--c1] [--c2] [--c0-range <n>] [--c1-range <n>] [--c2-range <n>]\n\n");
     printf("  optimizer validate --op <function> --original <path> --optimized <path> --cache <path>\n\n");
-    printf("Functions: exp2, log2, rcp, sqrt-even, sqrt-odd, rsqrt-even, rsqrt-odd, sin\n");
+    printf("Functions: exp2, log2, rcp, sqrt-even, sqrt-odd, rsqrt-even, "
+           "rsqrt-odd, sin, sigmoid\n");
 }
 
 void ensure_directory_exists(const std::string& path) {

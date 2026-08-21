@@ -25,10 +25,23 @@ float GroundTruthCache::bits_to_float(uint32_t bits) {
   return f;
 }
 
-std::vector<uint32_t> GroundTruthCache::generate_inputs(float range_start,
+std::vector<uint32_t> GroundTruthCache::generate_inputs(SFUOp op,
+                                                        float range_start,
                                                         float range_end,
                                                         int m_bits) {
   std::vector<uint32_t> inputs;
+
+  if (op == SFUOp::SIGMOID) {
+    // The hardware segmenter uses |x| / 16 in Q0.23.  Exhaust every reduced
+    // argument exactly once, matching 128 segments x 65536 local values.
+    constexpr uint32_t kReducedValues = 1U << 23;
+    inputs.reserve(kReducedValues);
+    for (uint32_t reduced = 0; reduced < kReducedValues; ++reduced) {
+      float input = static_cast<float>(reduced) * 0x1p-19f;
+      inputs.push_back(float_to_bits(input));
+    }
+    return inputs;
+  }
 
   // Get the exponent from range_start
   uint32_t start_bits = float_to_bits(range_start);
@@ -82,7 +95,7 @@ void GroundTruthCache::generate(SFUOp op, float range_start, float range_end,
       static_cast<int>(op), range_start, range_end, m_bits);
 
   // Generate all inputs
-  auto input_bits = generate_inputs(range_start, range_end, m_bits);
+  auto input_bits = generate_inputs(op, range_start, range_end, m_bits);
   printf("[Cache] Generated %zu input values\n", input_bits.size());
 
   std::vector<float> inputs(input_bits.size());

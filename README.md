@@ -4,7 +4,7 @@ A high-performance hardware implementation of special mathematical functions for
 
 ## Overview
 
-This project implements a unified **Special Function Unit (SFU)** that supports seven FP32 functions using a shared pipelined architecture based on fixed-point quadratic interpolation with lookup tables (LUT):
+This project implements a unified **Special Function Unit (SFU)** that supports eight FP32 functions using a shared pipelined architecture based on fixed-point quadratic interpolation with lookup tables (LUT):
 
 - **EXP2**: Base-2 exponential $2^x$
 - **LOG2**: Base-2 logarithm $\log_2(x)$
@@ -13,6 +13,7 @@ This project implements a unified **Special Function Unit (SFU)** that supports 
 - **RSQRT**: Reciprocal square root $1/\sqrt{x}$
 - **SIN**: $\sin\!\left(\frac{\pi}{2} x\right)$
 - **COS**: $\cos\!\left(\frac{\pi}{2} x\right)$
+- **SIGMOID**: $\sigma(x)=1/(1+e^{-x})$
 
 The architecture is based on the multifunction interpolation approach described by Oberman and Siu \[1\], which is consistent with the design used in NVIDIA SFUs.
 
@@ -40,6 +41,17 @@ For **EXP2**, the argument is decomposed as $x = I + F$ where $I = \lfloor x \rf
 
 For **SIN/COS**, the functions computed are $\sin(\frac{\pi}{2} x)$ and $\cos(\frac{\pi}{2} x)$. The period is 4, so `quadrant = floor(x) mod 4` is read from the two low bits of the integer part of $x$. The LUT stores coefficients for $\sin(\frac{\pi}{2} t)$ over $t \in [0, 1)$ with 64 sub-intervals. The fractional part $f \in [0, 1)$ is used for interpolation, and the quadrant determines whether to use $t = f$ or $t = 1 - f$ and the sign of the result.
 
+For **SIGMOID**, symmetry reduces the approximation to
+$h=\sigma(-|x|)$ over $|x|\in[0,16)$. The normalized argument
+$u=|x|/16$ is divided into 128 intervals. The LUT approximates $h(u)$ in
+unsigned Q0.26 using a positive $C_0$, negative $C_1$, and positive $C_2$;
+the compose stage returns $h$ for negative inputs and $1-h$ for non-negative
+inputs. Inputs with $|x|\ge16$ saturate to 0 or 1. The coefficients are formed
+with a degree-2 minimax solve, finite-word quantization, compensation search,
+and exhaustive evaluation of all $2^{23}$ reduced inputs, following the
+enhanced-minimax procedure in \[1\]. Run `python3 tools/gen_sigmoid_lut.py` to
+reproduce `lut/sigmoid-coeffs.txt` (NumPy and SciPy are required).
+
 The final result is assembled by combining the polynomial output with the input exponent according to each function's composition rule.
 
 ## Hardware Design
@@ -57,6 +69,7 @@ S0: Filter (1 cycle)
 S1: RangeReduce (1 cycle)
     - EXP2/SIN/COS: Compute integer and fractional decomposition
     - SIN/COS: quadrant = floor(x) mod 4; map fractional part f to t = f or 1-f based on quadrant[0]; sign from quadrant[1]
+    - SIGMOID: map |x| to u=|x|/16 and split u into a 7-bit index plus 16-bit local argument
     - LOG2/RCP/SQRT/RSQRT: Extract exponent and split mantissa into index + xl
     - SQRT/RSQRT: index[6] = E mod 2 (selects even/odd LUT)
     - Output: index (7 bits), xl (17 bits), exp (8 bits signed), sign (1 bit)
@@ -64,7 +77,7 @@ S1: RangeReduce (1 cycle)
 S2: LUT (1 cycle)
     - Index: 7 bits → 128 entries per function
     - EXP2/LOG2/SIN/COS: 64-entry tables (index[5:0])
-    - RCP: 128-entry table (full 7-bit index)
+    - RCP/SIGMOID: 128-entry tables (full 7-bit index)
     - SQRT/RSQRT: two 64-entry tables (even/odd), selected by index[6]
     - Each entry stores (c0, c1, c2) as signed fixed-point integers
 
@@ -89,12 +102,13 @@ S6: Compose (1 cycle)
       · SQRT:  exp_out = 127 + exp,  mant = polyResult[24:2]
       · RSQRT: exp_out = 126 - exp,  mant = polyResult[24:2]
       · SIN/COS: leading-zero normalization; clamp to ±1 if polyResult overflows
+      · SIGMOID: select h or 1-h from input sign; leading-zero normalize Q0.26
     - If bypass flag set, output bypassVal; otherwise output assembled result
 ```
 
 ### Key Features
 
-- **Unified Architecture**: Single 7-stage pipeline serves all seven functions
+- **Unified Architecture**: Single 7-stage pipeline serves all eight functions
 - **Full Throughput**: One result per cycle after initial latency
 - **128-Entry LUTs**: Per-function coefficient tables (some split into even/odd for SQRT/RSQRT)
 - **Fixed-Point Polynomial**: Quadratic approximation in integer arithmetic — no FP multipliers in datapath
@@ -199,6 +213,14 @@ Coefficients are optimized offline using the `optimizer` tool to minimize the wo
 | | NVIDIA GPU | 4.172e-07 | 13 | 9.454e-08 | 1.72 |
 
 > **Note on SIN/COS ULP near zeros**: Large ULP values near $\sin(x) = 0$ or $\cos(x) = 0$ are expected for the same reason as LOG2 near 1. The absolute errors remain small.
+
+### SIGMOID
+
+The coefficient generator exhaustively evaluates all $2^{23}$ reduced inputs
+over $[0,16)$. The maximum fixed-point interpolation absolute error is
+`2.648e-6`. Negative inputs use the exact symmetry reconstruction
+$\sigma(-x)=1-\sigma(x)$; special values and the saturated tails are checked
+separately. Run `make test-cmodel` for the exhaustive C-model regression.
 
 ### NVIDIA PTX ISA Specification Compliance
 

@@ -45,6 +45,8 @@ SFUOp parse_op(const char *str) {
     return SFUOp::SIN;
   if (strcmp(str, "cos") == 0)
     return SFUOp::COS;
+  if (strcmp(str, "sigmoid") == 0)
+    return SFUOp::SIGMOID;
   std::cerr << "Unknown operation: " << str << std::endl;
   exit(1);
 }
@@ -82,25 +84,14 @@ void compute_batch(ImplType type, const std::vector<float> &inputs,
 
 void test_operation(SFUOp op, ImplType dut_type, ImplType ref_type) {
   const char *op_names[] = {"EXP2",  "LOG2", "RCP", "SQRT",
-                            "RSQRT", "SIN",  "COS"};
+                            "RSQRT", "SIN",  "COS", "SIGMOID"};
   const char *impl_names[] = {"CHISEL", "CMODEL", "CPU", "GPU", "MPFR"};
 
   std::cout << "\n--- Testing " << op_names[static_cast<int>(op)]
             << " (DUT: " << impl_names[static_cast<int>(dut_type)]
             << ", REF: " << impl_names[static_cast<int>(ref_type)] << ")---\n";
 
-  // auto inputs = InputGen::generate(op);
-
-  // auto inputs = InputGen::generate_range(0x3e800000, 0x3f000000); //
-  // [0.25,0.5)
-  // auto inputs = InputGen::generate_range(0x3f000000, 0x3f800000); //
-  // [0.5,1.0)
-  // auto inputs = InputGen::generate_range(0x3f800000, 0x40000000); //
-  // [1.0,2.0)
-  auto inputs = InputGen::generate_range(0x40000000, 0x40800000); //
-  // [2.0,4.0)
-  // auto inputs = InputGen::generate_range(0xC0000000, 0xC0800000); //
-  // [-2.0,-4.0)
+  auto inputs = InputGen::generate(op);
   std::vector<float> dut_results, ref_results;
 
   compute_batch(dut_type, inputs, dut_results, op);
@@ -179,7 +170,8 @@ void print_usage(const char *prog) {
   std::cout << "  --ref <type>    Reference implementation "
                "(chisel|cmodel|cpu|gpu|mpfr)\n";
   std::cout
-      << "  --op <op>       Operation (exp2|log2|rcp|sqrt|rsqrt|sin|cos|all)\n";
+      << "  --op <op>       Operation "
+         "(exp2|log2|rcp|sqrt|rsqrt|sin|cos|sigmoid|all)\n";
   std::cout << "  --help          Show this help\n";
 }
 
@@ -211,7 +203,7 @@ int main(int argc, char **argv) {
 #endif
 
   if (op_str == "all") {
-    for (int i = 0; i < 7; i++) {
+    for (int i = 0; i < 8; i++) {
       test_operation(static_cast<SFUOp>(i), dut_type, ref_type);
     }
   } else {

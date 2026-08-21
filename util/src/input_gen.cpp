@@ -2,6 +2,20 @@
 #include <cstring>
 
 std::vector<float> InputGen::generate(SFUOp op, size_t count) {
+  if (op == SFUOp::SIGMOID) {
+    constexpr size_t kDefaultCount = 1U << 23;
+    if (count == 0 || count > kDefaultCount)
+      count = kDefaultCount;
+
+    std::vector<float> inputs;
+    inputs.reserve(count);
+    for (size_t i = 0; i < count; ++i) {
+      double t = count == 1 ? 0.0 : static_cast<double>(i) / (count - 1);
+      inputs.push_back(static_cast<float>(-16.0 + 32.0 * t));
+    }
+    return inputs;
+  }
+
   uint32_t start, end;
 
   switch (op) {

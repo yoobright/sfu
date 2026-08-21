@@ -11,6 +11,7 @@ object SFUOp {
   val RSQRT = 4.U(3.W)
   val SIN   = 5.U(3.W)
   val COS   = 6.U(3.W)
+  val SIGMOID = 7.U(3.W)
 }
 
 // just for readability, do not change values
@@ -48,6 +49,7 @@ object Function {
   val SQRT  = FunctionParams(6, 1,  1, -1, 0, -1, -3)
   val RSQRT = FunctionParams(6, 1, -1,  1, 0, -1, -1)
   val SIN   = FunctionParams(6, 1,  1,  -1, 0,  1, 1)
+  val SIGMOID = FunctionParams(7, 1, -1, 1, -1, 2, 3)
 
   def getShift0(op: UInt): UInt = {
     MuxLookup(op, 0.U(5.W)) (Seq(
@@ -57,7 +59,8 @@ object Function {
       SFUOp.SQRT  -> SQRT.shift0.U(5.W),
       SFUOp.RSQRT -> RSQRT.shift0.U(5.W),
       SFUOp.SIN   -> SIN.shift0.U(5.W),
-      SFUOp.COS   -> SIN.shift0.U(5.W)
+      SFUOp.COS   -> SIN.shift0.U(5.W),
+      SFUOp.SIGMOID -> SIGMOID.shift0.U(5.W)
     ))
   }
 
@@ -69,7 +72,8 @@ object Function {
       SFUOp.SQRT  -> SQRT.shift1.U(5.W),
       SFUOp.RSQRT -> RSQRT.shift1.U(5.W),
       SFUOp.SIN   -> SIN.shift1.U(5.W),
-      SFUOp.COS   -> SIN.shift1.U(5.W)
+      SFUOp.COS   -> SIN.shift1.U(5.W),
+      SFUOp.SIGMOID -> SIGMOID.shift1.U(5.W)
     ))
   }
   def getShift2(op: UInt): UInt = {
@@ -80,7 +84,8 @@ object Function {
       SFUOp.SQRT  -> SQRT.shift2.U(5.W),
       SFUOp.RSQRT -> RSQRT.shift2.U(5.W),
       SFUOp.SIN   -> SIN.shift2.U(5.W),
-      SFUOp.COS   -> SIN.shift2.U(5.W)
+      SFUOp.COS   -> SIN.shift2.U(5.W),
+      SFUOp.SIGMOID -> SIGMOID.shift2.U(5.W)
     ))
   }
 
@@ -252,6 +257,15 @@ class Filter extends Module {
       isInf  -> SFUParameters.NAN,
       isNaN  -> SFUParameters.NAN
     ))
+  }.elsewhen(io.in.bits.op === SFUOp.SIGMOID) {
+    val saturate = e >= 131.U // |x| >= 16
+    bypass    := isZero || isInf || isNaN || saturate
+    bypassVal := MuxCase(SFUParameters.POS_ZERO, Seq(
+      isZero   -> "h3F000000".U(32.W),
+      isInf    -> Mux(isNeg, SFUParameters.POS_ZERO, SFUParameters.POS_ONE),
+      isNaN    -> SFUParameters.NAN,
+      saturate -> Mux(isNeg, SFUParameters.POS_ZERO, SFUParameters.POS_ONE)
+    ))
   }.otherwise {
     bypass    := false.B
     bypassVal := SFUParameters.POS_ZERO
@@ -304,9 +318,13 @@ class RangeReduce extends Module {
   val fracSin  = Mux(quadrant(0), fracPartInv , fracPart)
   val fracCos  = Mux(quadrant(0), fracPart    , fracPartInv)
 
+  // |x| / 16 as a 23-bit fraction.  Values at or above 16 bypass in Filter.
+  val sigmoidArg = sigShifted(26, 4)
+
   val signFinal = MuxLookup(op, sign.asUInt) (Seq(
     SFUOp.SIN -> signSin,
-    SFUOp.COS -> signCos
+    SFUOp.COS -> signCos,
+    SFUOp.SIGMOID -> sign.asUInt
   ))
 
   val exp = MuxLookup(op, 0.S(8.W)) (Seq(
@@ -316,7 +334,8 @@ class RangeReduce extends Module {
     SFUOp.SQRT  -> (expSigned >> 1),
     SFUOp.RSQRT -> (expSigned >> 1),
     SFUOp.SIN   -> 0.S(8.W),
-    SFUOp.COS   -> 0.S(8.W)
+    SFUOp.COS   -> 0.S(8.W),
+    SFUOp.SIGMOID -> 0.S(8.W)
   ))
 
   val index = MuxLookup(op, 0.U(7.W)) (Seq(
@@ -326,7 +345,8 @@ class RangeReduce extends Module {
     SFUOp.SQRT  -> Cat(expSigned(0), mantissa(22, 17)),
     SFUOp.RSQRT -> Cat(expSigned(0), mantissa(22, 17)),
     SFUOp.SIN   -> Cat(0.U(1.W), fracSin(22, 17)),
-    SFUOp.COS   -> Cat(0.U(1.W), fracCos(22, 17))
+    SFUOp.COS   -> Cat(0.U(1.W), fracCos(22, 17)),
+    SFUOp.SIGMOID -> sigmoidArg(22, 16)
   ))
 
   val xl = MuxLookup(op, 0.U(32.W)) (Seq(
@@ -336,7 +356,8 @@ class RangeReduce extends Module {
     SFUOp.SQRT  -> mantissa(16, 0),
     SFUOp.RSQRT -> mantissa(16, 0),
     SFUOp.SIN   -> fracSin(16, 0),
-    SFUOp.COS   -> fracCos(16, 0)
+    SFUOp.COS   -> fracCos(16, 0),
+    SFUOp.SIGMOID -> Cat(0.U(1.W), sigmoidArg(15, 0))
   ))
  
   val s1     = Wire(Decoupled(new RangeReduceToLookup))
@@ -400,6 +421,7 @@ class LookupTable extends Module {
   val rsqrtEvenLUT = VecInit(loadLUT(s"$lutPath/rsqrt-even-coeffs.txt", Function.RSQRT.c0Sign, Function.RSQRT.c1Sign, Function.RSQRT.c2Sign))
   val rsqrtOddLUT  = VecInit(loadLUT(s"$lutPath/rsqrt-odd-coeffs.txt",  Function.RSQRT.c0Sign, Function.RSQRT.c1Sign, Function.RSQRT.c2Sign))
   val sinLUT       = VecInit(loadLUT(s"$lutPath/sin-coeffs.txt",        Function.SIN.c0Sign,   Function.SIN.c1Sign,   Function.SIN.c2Sign))
+  val sigmoidLUT   = VecInit(loadLUT(s"$lutPath/sigmoid-coeffs.txt",    Function.SIGMOID.c0Sign, Function.SIGMOID.c1Sign, Function.SIGMOID.c2Sign))
 
   val op    = io.in.bits.op
   val index = io.in.bits.index
@@ -411,7 +433,8 @@ class LookupTable extends Module {
     SFUOp.SQRT  -> Mux(index(6), sqrtOddLUT(index(5, 0)), sqrtEvenLUT(index(5, 0))),
     SFUOp.RSQRT -> Mux(index(6), rsqrtOddLUT(index(5, 0)), rsqrtEvenLUT(index(5, 0))),
     SFUOp.SIN   -> sinLUT(index(5, 0)),
-    SFUOp.COS   -> sinLUT(index(5, 0))
+    SFUOp.COS   -> sinLUT(index(5, 0)),
+    SFUOp.SIGMOID -> sigmoidLUT(index)
   ))
  
   val s1 = Wire(Decoupled(new LookupToPoly))
@@ -534,9 +557,21 @@ class Compose extends Module {
   val exp        = io.in.bits.exp
   val polyResult = io.in.bits.polyResult
 
-  // log2 sin ans cos special compose
-  val sum     = Cat(exp.asUInt, polyResult(25, 0))
-  val sumAbs  = Mux(exp(7), (~sum + 1.U(34.W)), sum)
+  // LUT result is h = sigmoid(-|x|) in Q0.26. Use sigmoid(x)=1-h for
+  // non-negative inputs before sharing the leading-zero normalizer.
+  val sigmoidFixed = Mux(sign.asBool, polyResult, "h4000000".U(27.W) - polyResult)
+
+  // log2, sin, cos, and sigmoid special compose
+  val sum = Mux(
+    io.in.bits.op === SFUOp.SIGMOID,
+    Cat(0.U(7.W), sigmoidFixed),
+    Cat(exp.asUInt, polyResult(25, 0))
+  )
+  val sumAbs = Mux(
+    io.in.bits.op === SFUOp.SIGMOID,
+    sum,
+    Mux(exp(7), (~sum + 1.U(34.W)), sum)
+  )
   val lzd     = PriorityEncoder(Reverse(sumAbs))
 
   val signLog2 = exp(7)
@@ -565,7 +600,8 @@ class Compose extends Module {
     SFUOp.SQRT  -> Cat(0.U(1.W), expSqrt, mantSqrt),
     SFUOp.RSQRT -> Cat(0.U(1.W), expRsqrt, mantRsqrt),
     SFUOp.SIN   -> Mux(polyResult(26), Cat(sign, 127.U(8.W) , 0.U(23.W)), Cat(sign, expSin, mantSin)),
-    SFUOp.COS   -> Mux(polyResult(26), Cat(sign, 127.U(8.W) , 0.U(23.W)), Cat(sign, expSin, mantSin))
+    SFUOp.COS   -> Mux(polyResult(26), Cat(sign, 127.U(8.W) , 0.U(23.W)), Cat(sign, expSin, mantSin)),
+    SFUOp.SIGMOID -> Cat(0.U(1.W), expSin, mantSin)
   ))
 
   val s1     = Wire(Decoupled(new SFUOutput))

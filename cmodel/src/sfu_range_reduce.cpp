@@ -29,6 +29,9 @@ RangeReduceOutput SFURangeReduce::reduce(const FilterOutput &input, SFUOp op) {
   uint32_t frac_part_floor = (input.sign && frac_part != 0)
                                  ? ((frac_part_inv + 1) & 0x7FFFFF)
                                  : frac_part;
+  // sigmoid_arg is |x| / 16 represented as a 23-bit fraction.  Inputs with
+  // |x| >= 16 have already been saturated by the filter stage.
+  uint32_t sigmoid_arg = (sig_shifted >> 4) & 0x7FFFFF;
 
   uint8_t quadrand = int_part & 0x3;
 
@@ -110,6 +113,11 @@ RangeReduceOutput SFURangeReduce::reduce(const FilterOutput &input, SFUOp op) {
       out.xl = frac_part & 0x1FFFF;
       break;
     }
+    break;
+  case SFUOp::SIGMOID:
+    out.exp = 0;
+    out.index = (sigmoid_arg >> 16) & 0x7F;
+    out.xl = sigmoid_arg & 0xFFFF;
     break;
   default:
     break;
