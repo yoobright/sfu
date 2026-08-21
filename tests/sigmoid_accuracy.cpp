@@ -13,6 +13,7 @@ struct Interval {
   const char *name;
   uint32_t begin;
   uint32_t end;
+  bool reduced;
 };
 
 struct AccuracyStats {
@@ -41,9 +42,9 @@ uint32_t float_bits(float value) {
 
 AccuracyStats measure(const Interval &interval) {
   AccuracyStats stats;
-  for (uint32_t input_bits = interval.begin; input_bits < interval.end;
-       ++input_bits) {
-    float input = from_bits(input_bits);
+  for (uint32_t value = interval.begin; value < interval.end; ++value) {
+    float input = interval.reduced ? static_cast<float>(value) * 0x1p-19f
+                                   : from_bits(value);
     float actual = SFUCore::compute(input, SFUOp::SIGMOID);
     float reference = sigmoid_reference(input);
     double abs_error =
@@ -66,12 +67,13 @@ AccuracyStats measure(const Interval &interval) {
 } // namespace
 
 int main() {
-  constexpr std::array<Interval, 5> kIntervals = {{
-      {"[0.25, 0.5)", 0x3E800000, 0x3F000000},
-      {"[0.5, 1)", 0x3F000000, 0x3F800000},
-      {"[1, 2)", 0x3F800000, 0x40000000},
-      {"[2, 4)", 0x40000000, 0x40800000},
-      {"[4, 6)", 0x40800000, 0x40C00000},
+  constexpr std::array<Interval, 6> kIntervals = {{
+      {"[0, 0.25)", 0, 1U << 17, true},
+      {"[0.25, 0.5)", 0x3E800000, 0x3F000000, false},
+      {"[0.5, 1)", 0x3F000000, 0x3F800000, false},
+      {"[1, 2)", 0x3F800000, 0x40000000, false},
+      {"[2, 4)", 0x40000000, 0x40800000, false},
+      {"[4, 6)", 0x40800000, 0x40C00000, false},
   }};
 
   SFUCore::init();

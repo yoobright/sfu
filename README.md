@@ -219,12 +219,16 @@ Coefficients are optimized offline using the `optimizer` tool to minimize the wo
 ### SIGMOID
 
 The experiment uses the same four positive intervals as the other functions,
-plus $[4,6)$ to cover the remainder of the non-saturated positive domain. Every
-FP32 input in each half-open interval is evaluated. The C model is compared
-with the FP32 rounding of a double-precision sigmoid reference.
+plus $[0,0.25)$ and $[4,6)$ to cover the complete non-saturated positive
+domain. For $[0,0.25)$, all 131,072 hardware-distinct Q0.23 reduced arguments
+are evaluated; this avoids redundantly enumerating about 1.05 billion FP32
+encodings that collapse onto those reduced values. Every FP32 encoding is
+evaluated in each remaining half-open interval. The C model is compared with
+the FP32 rounding of a double-precision sigmoid reference.
 
 | Interval | Implementation | MaxAbsErr | MaxULP | AvgAbsErr | AvgULP |
 |----------|---------------|-----------|--------|-----------|--------|
+| **[0, 0.25)** | This work | 2.682e-06 | **45** | 1.375e-06 | 23.07 |
 | **[0.25, 0.5)** | This work | 3.159e-06 | **53** | 1.347e-06 | 22.60 |
 | **[0.5, 1)** | This work | 2.265e-06 | **38** | 8.149e-07 | 13.67 |
 | **[1, 2)** | This work | 7.749e-07 | **13** | 2.031e-07 | 3.41 |
