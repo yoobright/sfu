@@ -12,7 +12,7 @@ struct LUTEntry {
 
 class SFULUT {
 public:
-  static void init();
+  static void init(uint32_t sigmoid_lut_entries = 128);
   static LUTOutput lookup(const RangeReduceOutput &input, SFUOp op);
 
 private:

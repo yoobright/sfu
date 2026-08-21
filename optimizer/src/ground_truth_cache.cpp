@@ -32,13 +32,19 @@ std::vector<uint32_t> GroundTruthCache::generate_inputs(SFUOp op,
   std::vector<uint32_t> inputs;
 
   if (op == SFUOp::SIGMOID) {
-    // The hardware segmenter uses |x| / 8 in Q0.23. Exhaust every reduced
-    // argument exactly once, matching 128 segments x 65536 local values.
-    constexpr uint32_t kReducedValues = 1U << 23;
-    inputs.reserve(kReducedValues);
-    for (uint32_t reduced = 0; reduced < kReducedValues; ++reduced) {
-      float input = static_cast<float>(reduced) * 0x1p-20f;
-      inputs.push_back(float_to_bits(input));
+    // Exhaust the default 128-entry region layout exactly once: 64 x 1/32
+    // intervals on [0,2), then 64 x 1/16 intervals on [2,6).
+    constexpr uint32_t kSegments = 128;
+    constexpr uint32_t kLocalValues = 1U << 16;
+    inputs.reserve(kSegments * kLocalValues);
+    for (uint32_t segment = 0; segment < kSegments; ++segment) {
+      float start = segment < 64
+                        ? static_cast<float>(segment) * 0x1p-5f
+                        : 2.0f + static_cast<float>(segment - 64) * 0x1p-4f;
+      float step = segment < 64 ? 0x1p-21f : 0x1p-20f;
+      for (uint32_t local = 0; local < kLocalValues; ++local) {
+        inputs.push_back(float_to_bits(start + static_cast<float>(local) * step));
+      }
     }
     return inputs;
   }

@@ -44,6 +44,10 @@ test-cmodel: $(SIGMOID_TEST)
 accuracy-sigmoid: $(SIGMOID_ACCURACY)
 	@LUT_PATH=./lut ./$(SIGMOID_ACCURACY)
 
+generate-sigmoid-luts:
+	python3 tools/gen_sigmoid_lut.py --segments 64
+	python3 tools/gen_sigmoid_lut.py --segments 128
+
 run: $(TARGET)
 	@LUT_PATH=./lut ./$(TARGET)
 
@@ -81,4 +85,4 @@ clean:
 	rm -rf $(BUILD_DIR)
 	for dir in $(SUBDIRS); do $(MAKE) -C $$dir clean; done
 
-.PHONY: all clean test-cmodel accuracy-sigmoid $(SUBDIRS)
+.PHONY: all clean test-cmodel accuracy-sigmoid generate-sigmoid-luts $(SUBDIRS)

@@ -40,10 +40,11 @@ uint32_t float_bits(float value) {
   return bits;
 }
 
-AccuracyStats measure(const Interval &interval) {
+AccuracyStats measure(const Interval &interval, uint32_t lut_entries) {
   AccuracyStats stats;
   for (uint32_t value = interval.begin; value < interval.end; ++value) {
-    float input = interval.reduced ? static_cast<float>(value) * 0x1p-20f
+    float reduced_step = lut_entries == 128 ? 0x1p-21f : 0x1p-20f;
+    float input = interval.reduced ? static_cast<float>(value) * reduced_step
                                    : from_bits(value);
     float actual = SFUCore::compute(input, SFUOp::SIGMOID);
     float reference = sigmoid_reference(input);
@@ -67,28 +68,31 @@ AccuracyStats measure(const Interval &interval) {
 } // namespace
 
 int main() {
-  constexpr std::array<Interval, 6> kIntervals = {{
-      {"[0, 0.25)", 0, 1U << 18, true},
-      {"[0.25, 0.5)", 0x3E800000, 0x3F000000, false},
-      {"[0.5, 1)", 0x3F000000, 0x3F800000, false},
-      {"[1, 2)", 0x3F800000, 0x40000000, false},
-      {"[2, 4)", 0x40000000, 0x40800000, false},
-      {"[4, 6)", 0x40800000, 0x40C00000, false},
-  }};
+  for (uint32_t lut_entries : {64U, 128U}) {
+    std::array<Interval, 6> intervals = {{
+        {"[0, 0.25)", 0, lut_entries == 128 ? 1U << 19 : 1U << 18, true},
+        {"[0.25, 0.5)", 0x3E800000, 0x3F000000, false},
+        {"[0.5, 1)", 0x3F000000, 0x3F800000, false},
+        {"[1, 2)", 0x3F800000, 0x40000000, false},
+        {"[2, 4)", 0x40000000, 0x40800000, false},
+        {"[4, 6)", 0x40800000, 0x40C00000, false},
+    }};
 
-  SFUCore::init();
-  std::cout << "Interval       Samples  MaxAbsErr    MaxULP  AvgAbsErr    AvgULP\n";
-  for (const Interval &interval : kIntervals) {
-    AccuracyStats stats = measure(interval);
-    std::cout << std::left << std::setw(14) << interval.name << std::right
-              << std::setw(9) << stats.samples << "  " << std::scientific
-              << std::setprecision(6) << std::setw(12) << stats.max_abs_error
-              << "  " << std::fixed << std::setprecision(0) << std::setw(6)
-              << stats.max_ulp << "  " << std::scientific
-              << std::setprecision(6) << std::setw(12)
-              << stats.sum_abs_error / stats.samples << "  " << std::fixed
-              << std::setprecision(2) << std::setw(6)
-              << static_cast<double>(stats.sum_ulp) / stats.samples << '\n';
+    SFUCore::init(lut_entries);
+    std::cout << "\nSIGMOID " << lut_entries << "-entry LUT\n";
+    std::cout << "Interval       Samples  MaxAbsErr    MaxULP  AvgAbsErr    AvgULP\n";
+    for (const Interval &interval : intervals) {
+      AccuracyStats stats = measure(interval, lut_entries);
+      std::cout << std::left << std::setw(14) << interval.name << std::right
+                << std::setw(9) << stats.samples << "  " << std::scientific
+                << std::setprecision(6) << std::setw(12) << stats.max_abs_error
+                << "  " << std::fixed << std::setprecision(0) << std::setw(6)
+                << stats.max_ulp << "  " << std::scientific
+                << std::setprecision(6) << std::setw(12)
+                << stats.sum_abs_error / stats.samples << "  " << std::fixed
+                << std::setprecision(2) << std::setw(6)
+                << static_cast<double>(stats.sum_ulp) / stats.samples << '\n';
+    }
   }
   return 0;
 }
