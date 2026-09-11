@@ -83,10 +83,11 @@ module Filter(	// scala/SFU.scala:180:7
   wire             _GEN = isInf | isNaN;	// scala/SFU.scala:191:34, :192:34, src/main/scala/chisel3/util/Mux.scala:126:16
   wire             sigmoidSaturate = io_in_bits_x[30:0] >= 31'h41000000;
   wire             tanhSaturate = io_in_bits_x[30:0] >= 31'h41000000;
-  wire             tanhBypass = isZero | isInf | isNaN | tanhSaturate;
+  wire             tanhSmall = io_in_bits_x[30:0] < 31'h3A000000;
+  wire             tanhBypass = tanhSmall | isInf | isNaN | tanhSaturate;
   wire [31:0]      tanhBypassVal =
-    isZero
-      ? {io_in_bits_x[31], 31'h0}
+    tanhSmall
+      ? io_in_bits_x
       : isNaN
           ? 32'h7FFFFFFF
           : (io_in_bits_x[31] ? 32'hBF800000 : 32'h3F800000);

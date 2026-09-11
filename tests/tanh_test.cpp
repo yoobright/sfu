@@ -1,4 +1,5 @@
 #include "sfu_core.h"
+#include "sfu_filter.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -27,6 +28,21 @@ int main() {
   ok &= expect(std::numeric_limits<float>::infinity(), 0x3F800000);
   ok &= expect(-std::numeric_limits<float>::infinity(), 0xBF800000);
   ok &= std::isnan(SFUCore::compute(std::numeric_limits<float>::quiet_NaN(), SFUOp::TANH));
+
+  float small_positive = std::nextafter(0x1p-11f, 0.0f);
+  float small_negative = -small_positive;
+  ok &= expect(small_positive, bits(small_positive));
+  ok &= expect(small_negative, bits(small_negative));
+  float subnormal = std::numeric_limits<float>::denorm_min();
+  ok &= expect(subnormal, bits(subnormal));
+  ok &= expect(-subnormal, bits(-subnormal));
+
+  FilterOutput at_threshold =
+      SFUFilter::filter(bits(0x1p-11f), SFUOp::TANH);
+  if (at_threshold.bypass) {
+    std::cerr << "TANH small-input bypass included the 2^-11 boundary\n";
+    ok = false;
+  }
 
   double max_abs = 0.0;
   double max_reversal = 0.0;

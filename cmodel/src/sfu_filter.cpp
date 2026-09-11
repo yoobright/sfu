@@ -117,7 +117,9 @@ FilterOutput SFUFilter::filter(uint32_t input_bits, SFUOp op) {
     if (is_inf || (input_bits & 0x7FFFFFFF) >= 0x41000000) {
       out.bypass = true;
       out.bypass_val = sign ? 0xBF800000 : 0x3F800000;
-    } else if (is_zero) {
+    } else if ((input_bits & 0x7FFFFFFF) < 0x3A000000) {
+      // tanh(x) rounds to x in the small-input region. Returning the input
+      // also avoids converting one Q0.26 step into thousands of FP32 ULPs.
       out.bypass = true;
       out.bypass_val = input_bits;
     }

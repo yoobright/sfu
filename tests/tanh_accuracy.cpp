@@ -20,10 +20,11 @@ int main() {
     {"[2,4)",2,4},{"[4,6)",4,6},{"[6,8)",6,8}}};
   SFUCore::init();
   bool ok = true;
-  std::cout << "Interval   MaxAbsErr    MaxULP\n";
+  std::cout << "Interval   MaxAbsErr    MaxULP  WorstULPX\n";
   for (const auto &interval : intervals) {
     double maximum = 0.0;
     uint32_t max_ulp = 0;
+    float worst_ulp_input = 0.0f;
     constexpr unsigned kSamples = 1U << 20;
     for (unsigned i=0; i<kSamples; ++i) {
       double t=(static_cast<double>(i)+.5)/kSamples;
@@ -34,13 +35,18 @@ int main() {
                          std::abs(static_cast<double>(actual) - reference));
       uint32_t actual_bits = bits(actual);
       uint32_t reference_bits = bits(reference);
-      max_ulp = std::max(max_ulp, actual_bits > reference_bits
-                                      ? actual_bits - reference_bits
-                                      : reference_bits - actual_bits);
+      uint32_t ulp = actual_bits > reference_bits
+                         ? actual_bits - reference_bits
+                         : reference_bits - actual_bits;
+      if (ulp > max_ulp) {
+        max_ulp = ulp;
+        worst_ulp_input = x;
+      }
     }
     std::cout << std::left << std::setw(10) << interval.name << std::scientific
               << std::setprecision(6) << std::setw(13) << maximum
-              << std::fixed << max_ulp << '\n';
+              << std::fixed << std::setw(8) << max_ulp << std::scientific
+              << std::setprecision(6) << worst_ulp_input << '\n';
     ok &= maximum <= 1.2e-6;
   }
   return ok ? 0 : 1;
