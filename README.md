@@ -4,7 +4,7 @@ A high-performance hardware implementation of special mathematical functions for
 
 ## Overview
 
-This project implements a unified **Special Function Unit (SFU)** that supports eight FP32 functions using a shared pipelined architecture based on fixed-point quadratic interpolation with lookup tables (LUT):
+This project implements a unified **Special Function Unit (SFU)** that supports nine FP32 functions using a shared pipelined architecture based on fixed-point quadratic interpolation with lookup tables (LUT):
 
 - **EXP2**: Base-2 exponential $2^x$
 - **LOG2**: Base-2 logarithm $\log_2(x)$
@@ -14,6 +14,7 @@ This project implements a unified **Special Function Unit (SFU)** that supports 
 - **SIN**: $\sin\!\left(\frac{\pi}{2} x\right)$
 - **COS**: $\cos\!\left(\frac{\pi}{2} x\right)$
 - **SIGMOID**: $\sigma(x)=1/(1+e^{-x})$
+- **EXP**: Clipped negative-domain exponential $e^x$, effective over $[-16,0]$
 
 The architecture is based on the multifunction interpolation approach described by Oberman and Siu \[1\], which is consistent with the design used in NVIDIA SFUs.
 
@@ -38,6 +39,17 @@ $$
 The three coefficients $(c_0, c_1, c_2)$ are stored per interval in a LUT and optimized offline to minimize the maximum approximation error (minimax optimization). All arithmetic in the polynomial evaluation is performed in **fixed-point integer arithmetic**, avoiding floating-point operations in the critical path.
 
 For **EXP2**, the argument is decomposed as $x = I + F$ where $I = \lfloor x \rfloor$ is the integer part and $F$ is the fractional part. The polynomial approximates $2^F$ over $[0, 1)$, and the exponent $I$ is applied in the compose stage.
+
+For **EXP**, the range reducer first computes $y=x\log_2(e)$ with the Q1.31
+constant `0xB8AA3B29`, then decomposes $y=I+F$ and reuses the EXP2 LUT,
+polynomial, and compose path:
+
+$$e^x=2^{x\log_2(e)}=2^I2^F.$$
+
+The operation is intended for softmax-like negative inputs. It computes the
+approximation on the inclusive interval $[-16,0]$, returns zero for $x<-16$,
+and returns one for $x>0$. Thus `EXP` is deliberately a clipped operation, not
+a replacement for a full-range IEEE-754 `expf`.
 
 For **SIN/COS**, the functions computed are $\sin(\frac{\pi}{2} x)$ and $\cos(\frac{\pi}{2} x)$. The period is 4, so `quadrant = floor(x) mod 4` is read from the two low bits of the integer part of $x$. The LUT stores coefficients for $\sin(\frac{\pi}{2} t)$ over $t \in [0, 1)$ with 64 sub-intervals. The fractional part $f \in [0, 1)$ is used for interpolation, and the quadrant determines whether to use $t = f$ or $t = 1 - f$ and the sign of the result.
 
@@ -76,6 +88,7 @@ The final result is assembled by combining the polynomial output with the input 
 S0: Filter (1 cycle)
     - Handle special values: NaN, ±Inf, ±0, subnormals (treated as zero)
     - Handle out-of-range inputs for EXP2 (overflow/underflow)
+    - Clip EXP below -16 to 0 and above 0 to 1
     - Saturate SIGMOID to 0 or 1 when |x| >= 6
     - Handle negative inputs for LOG2, SQRT, RSQRT
     - Output bypass flag and bypass value for special cases
@@ -83,6 +96,7 @@ S0: Filter (1 cycle)
 
 S1: RangeReduce (1 cycle)
     - EXP2/SIN/COS: Compute integer and fractional decomposition
+    - EXP: multiply the magnitude by Q1.31 log2(e), then use the EXP2 decomposition
     - SIN/COS: quadrant = floor(x) mod 4; map fractional part f to t = f or 1-f based on quadrant[0]; sign from quadrant[1]
     - SIGMOID: split |x| at 2; select one of 128 intervals with bit slices and form a 16-bit local argument
     - LOG2/RCP/SQRT/RSQRT: Extract exponent and split mantissa into index + xl
@@ -91,7 +105,7 @@ S1: RangeReduce (1 cycle)
 
 S2: LUT (1 cycle)
     - Index: 7 bits → 128 entries per function
-    - EXP2/LOG2/SIN/COS: 64-entry tables (index[5:0])
+    - EXP2/EXP/LOG2/SIN/COS: 64-entry tables (index[5:0]); EXP shares EXP2
     - RCP/SIGMOID: 128-entry tables (full 7-bit index)
     - SQRT/RSQRT: two 64-entry tables (even/odd), selected by index[6]
     - Each entry stores (c0, c1, c2) as signed fixed-point integers
@@ -112,6 +126,7 @@ S5: Poly Stage 3 — Align and Sum (1 cycle)
 S6: Compose (1 cycle)
     - Assemble final FP32 from polyResult and exp:
       · EXP2:  exp_out = 127 + exp,  mant = polyResult[24:2]
+      · EXP:   same compose path as EXP2 after log2(e) range reduction
       · LOG2:  leading-zero detection on {exp, polyResult[25:0]}, normalize
       · RCP:   exp_out = 126 - exp,  mant = polyResult[24:2]
       · SQRT:  exp_out = 127 + exp,  mant = polyResult[24:2]
@@ -123,7 +138,7 @@ S6: Compose (1 cycle)
 
 ### Key Features
 
-- **Unified Architecture**: Single 7-stage pipeline serves all eight functions
+- **Unified Architecture**: Single 7-stage pipeline serves all nine functions
 - **Full Throughput**: One result per cycle after initial latency
 - **128-Entry LUTs**: Per-function coefficient tables (some split into even/odd for SQRT/RSQRT)
 - **Fixed-Point Polynomial**: Quadratic approximation in integer arithmetic — no FP multipliers in datapath
@@ -264,6 +279,23 @@ $\sigma(-x)=1-\sigma(x)$. At $|x|\ge6$, the output intentionally saturates to
 0 or 1 and is therefore outside the interpolation-accuracy experiment. Run
 `make accuracy-sigmoid` to reproduce the table and `make test-cmodel` for the
 reduced-domain, symmetry, boundary, and special-value regression.
+
+### EXP
+
+The EXP accuracy test samples 1,048,576 points in each interval. The reference
+is `exp` evaluated in double precision and rounded to FP32.
+
+| Interval | MaxAbsErr | MaxULP | AvgAbsErr | AvgULP |
+|----------|-----------|--------|-----------|--------|
+| **[-16, -8)** | 2.910e-11 | **2** | 9.369e-13 | 0.27 |
+| **[-8, -4)** | 1.863e-09 | **2** | 1.009e-10 | 0.27 |
+| **[-4, -2)** | 1.490e-08 | **2** | 1.306e-09 | 0.27 |
+| **[-2, -1)** | 5.960e-08 | **2** | 5.251e-09 | 0.26 |
+| **[-1, 0]** | 1.192e-07 | **2** | 1.401e-08 | 0.28 |
+
+Run `make accuracy-exp` to reproduce the table. `make test-cmodel` also checks
+the clipping boundaries, NaN/infinity handling, monotonicity, and the 2-ULP
+sampled accuracy limit.
 
 ### NVIDIA PTX ISA Specification Compliance
 

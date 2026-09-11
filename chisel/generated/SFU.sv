@@ -56,13 +56,13 @@ module Filter(	// scala/SFU.scala:180:7
   output        io_in_ready,	// scala/SFU.scala:181:14
   input         io_in_valid,	// scala/SFU.scala:181:14
   input  [31:0] io_in_bits_x,	// scala/SFU.scala:181:14
-  input  [2:0]  io_in_bits_op,	// scala/SFU.scala:181:14
+  input  [3:0]  io_in_bits_op,	// scala/SFU.scala:181:14
   input         io_out_ready,	// scala/SFU.scala:181:14
   output        io_out_valid,	// scala/SFU.scala:181:14
                 io_out_bits_sign,	// scala/SFU.scala:181:14
   output [7:0]  io_out_bits_exponent,	// scala/SFU.scala:181:14
   output [22:0] io_out_bits_mantissa,	// scala/SFU.scala:181:14
-  output [2:0]  io_out_bits_op,	// scala/SFU.scala:181:14
+  output [3:0]  io_out_bits_op,	// scala/SFU.scala:181:14
   output        io_out_bits_bypass,	// scala/SFU.scala:181:14
   output [31:0] io_out_bits_bypassVal	// scala/SFU.scala:181:14
 );
@@ -71,7 +71,7 @@ module Filter(	// scala/SFU.scala:180:7
   reg              s1Pipe_rBits_sign;	// scala/SFU.scala:110:25
   reg  [7:0]       s1Pipe_rBits_exponent;	// scala/SFU.scala:110:25
   reg  [22:0]      s1Pipe_rBits_mantissa;	// scala/SFU.scala:110:25
-  reg  [2:0]       s1Pipe_rBits_op;	// scala/SFU.scala:110:25
+  reg  [3:0]       s1Pipe_rBits_op;	// scala/SFU.scala:110:25
   reg              s1Pipe_rBits_bypass;	// scala/SFU.scala:110:25
   reg  [31:0]      s1Pipe_rBits_bypassVal;	// scala/SFU.scala:110:25
   wire             s1_ready = ~s1Pipe_rValid | io_out_ready;	// scala/SFU.scala:109:29, :111:{35,43}
@@ -82,6 +82,17 @@ module Filter(	// scala/SFU.scala:180:7
   wire             tooBig = ~(io_in_bits_x[31]) & _tooNeg_T;	// scala/SFU.scala:186:23, :195:{17,21,27}
   wire             _GEN = isInf | isNaN;	// scala/SFU.scala:191:34, :192:34, src/main/scala/chisel3/util/Mux.scala:126:16
   wire             sigmoidSaturate = io_in_bits_x[30:0] >= 31'h40C00000;
+  wire             expBelowRange = io_in_bits_x[31] & io_in_bits_x[30:0] > 31'h41800000;
+  wire             expPositive = ~(io_in_bits_x[31]) & ~isZero;
+  wire             expBypass = isZero | isInf | isNaN | expBelowRange | expPositive;
+  wire [31:0]      expBypassVal =
+    isZero
+      ? 32'h3F800000
+      : isInf
+          ? (io_in_bits_x[31] ? 32'h0 : 32'h3F800000)
+          : isNaN
+              ? 32'h7FFFFFFF
+              : expBelowRange ? 32'h0 : 32'h3F800000;
   wire             _GEN_0 = io_in_bits_op == 3'h6 & (isZero | isInf | isNaN);	// scala/SFU.scala:190:21, :191:34, :192:34, :248:{28,43}, :249:{15,34}, :256:15
   wire [7:0]       _GEN_1 =
     {{isZero | isInf | isNaN | sigmoidSaturate},
@@ -130,8 +141,10 @@ module Filter(	// scala/SFU.scala:180:7
       s1Pipe_rBits_exponent <= io_in_bits_x[30:23];	// scala/SFU.scala:110:25, :187:23
       s1Pipe_rBits_mantissa <= io_in_bits_x[22:0];	// scala/SFU.scala:110:25, :188:23
       s1Pipe_rBits_op <= io_in_bits_op;	// scala/SFU.scala:110:25
-      s1Pipe_rBits_bypass <= _GEN_1[io_in_bits_op];	// scala/SFU.scala:110:25, :201:{22,38}, :202:15, :210:{28,44}, :211:15, :218:{28,43}, :219:15, :225:{28,44}, :226:15, :233:{28,45}, :234:15, :241:{28,43}, :242:15, :248:43
-      s1Pipe_rBits_bypassVal <= _GEN_2[io_in_bits_op];	// scala/SFU.scala:110:25, :201:{22,38}, :203:15, :210:{28,44}, :212:15, :218:{28,43}, :220:15, :225:{28,44}, :227:15, :233:{28,45}, :235:15, :241:{28,43}, :243:15, :248:{28,43}, :250:15, :257:15
+      s1Pipe_rBits_bypass <=
+        io_in_bits_op == 4'h8 ? expBypass : _GEN_1[io_in_bits_op[2:0]];
+      s1Pipe_rBits_bypassVal <=
+        io_in_bits_op == 4'h8 ? expBypassVal : _GEN_2[io_in_bits_op[2:0]];
     end
   end // always @(posedge)
   `ifdef ENABLE_INITIAL_REG_	// scala/SFU.scala:180:7
@@ -178,7 +191,7 @@ module RangeReduce(	// scala/SFU.scala:275:7
                 io_in_bits_sign,	// scala/SFU.scala:276:14
   input  [7:0]  io_in_bits_exponent,	// scala/SFU.scala:276:14
   input  [22:0] io_in_bits_mantissa,	// scala/SFU.scala:276:14
-  input  [2:0]  io_in_bits_op,	// scala/SFU.scala:276:14
+  input  [3:0]  io_in_bits_op,	// scala/SFU.scala:276:14
   input         io_in_bits_bypass,	// scala/SFU.scala:276:14
   input  [31:0] io_in_bits_bypassVal,	// scala/SFU.scala:276:14
   input         io_out_ready,	// scala/SFU.scala:276:14
@@ -187,7 +200,7 @@ module RangeReduce(	// scala/SFU.scala:275:7
   output [16:0] io_out_bits_xl,	// scala/SFU.scala:276:14
   output        io_out_bits_sign,	// scala/SFU.scala:276:14
   output [7:0]  io_out_bits_exp,	// scala/SFU.scala:276:14
-  output [2:0]  io_out_bits_op,	// scala/SFU.scala:276:14
+  output [3:0]  io_out_bits_op,	// scala/SFU.scala:276:14
   output        io_out_bits_bypass,	// scala/SFU.scala:276:14
   output [31:0] io_out_bits_bypassVal	// scala/SFU.scala:276:14
 );
@@ -197,7 +210,7 @@ module RangeReduce(	// scala/SFU.scala:275:7
   reg  [16:0]      s1Pipe_rBits_xl;	// scala/SFU.scala:110:25
   reg              s1Pipe_rBits_sign;	// scala/SFU.scala:110:25
   reg  [7:0]       s1Pipe_rBits_exp;	// scala/SFU.scala:110:25
-  reg  [2:0]       s1Pipe_rBits_op;	// scala/SFU.scala:110:25
+  reg  [3:0]       s1Pipe_rBits_op;	// scala/SFU.scala:110:25
   reg              s1Pipe_rBits_bypass;	// scala/SFU.scala:110:25
   reg  [31:0]      s1Pipe_rBits_bypassVal;	// scala/SFU.scala:110:25
   wire             s1_ready = ~s1Pipe_rValid | io_out_ready;	// scala/SFU.scala:109:29, :111:{35,43}
@@ -215,6 +228,15 @@ module RangeReduce(	// scala/SFU.scala:275:7
     io_in_bits_sign & (|(sigShifted[22:0]))
       ? ~(sigShifted[22:0]) + 23'h1
       : sigShifted[22:0];	// scala/SFU.scala:291:26, :293:33, :294:24, :295:32, :297:{26,32,62}
+  wire [62:0]      expScaledProduct = sigShifted * 32'hB8AA3B29;
+  wire [62:0]      expScaledRounded = expScaledProduct + 63'h40000000;
+  wire [31:0]      expScaled = expScaledRounded[62:31];
+  wire [7:0]       expIntPart = expScaled[30:23];
+  wire [22:0]      expFracPart = expScaled[22:0];
+  wire [7:0]       expIntPartFloor =
+    (|expFracPart) ? expIntPart + 8'h1 : expIntPart;
+  wire [22:0]      expFracPartFloor =
+    (|expFracPart) ? ~expFracPart + 23'h1 : 23'h0;
   wire [22:0]      fracSin = {23{sigShifted[23]}} ^ sigShifted[22:0];	// scala/SFU.scala:291:26, :292:33, :293:33, :300:25, :302:40, :304:21
   wire [22:0]      fracCos = {23{~(sigShifted[23])}} ^ sigShifted[22:0];	// scala/SFU.scala:291:26, :292:33, :293:33, :300:25, :302:40, :305:21
   wire             sigmoidFineRegion = sigShifted[30:23] < 8'h2;
@@ -250,14 +272,22 @@ module RangeReduce(	// scala/SFU.scala:275:7
     else	// scala/SFU.scala:275:7
       s1Pipe_rValid <= _s1Pipe_T | ~(io_out_ready & s1Pipe_rValid) & s1Pipe_rValid;	// scala/SFU.scala:109:29, :114:36, :116:18, :117:31, :118:18, src/main/scala/chisel3/util/Decoupled.scala:51:35
     if (_s1Pipe_T) begin	// src/main/scala/chisel3/util/Decoupled.scala:51:35
-      s1Pipe_rBits_index <= _GEN_0[io_in_bits_op];	// scala/SFU.scala:110:25, :307:46, :312:37, :322:39
-      s1Pipe_rBits_xl <= _GEN_1[io_in_bits_op][16:0];	// scala/SFU.scala:110:25, :307:46, :312:37, :332:37, :347:22
+      s1Pipe_rBits_index <=
+        io_in_bits_op == 4'h8
+          ? {1'h0, expFracPartFloor[22:17]}
+          : _GEN_0[io_in_bits_op[2:0]];
+      s1Pipe_rBits_xl <=
+        io_in_bits_op == 4'h8
+          ? expFracPartFloor[16:0]
+          : _GEN_1[io_in_bits_op[2:0]][16:0];
       s1Pipe_rBits_sign <=
         _xl_T_20
           ? sigShifted[24] ^ sigShifted[23]
           : _xl_T_18 & sigShifted[24] ^ io_in_bits_sign;	// scala/SFU.scala:110:25, :291:26, :292:33, :300:25, :301:40, :302:{30,40}, :307:46
       s1Pipe_rBits_exp <=
-        _xl_T_20 | _xl_T_18
+        io_in_bits_op == 4'h8
+          ? 8'h0 - expIntPartFloor
+          : _xl_T_20 | _xl_T_18
           ? 8'h0
           : io_in_bits_op == 3'h4 | io_in_bits_op == 3'h3
               ? _expSigned_T_1[8:1]
@@ -318,7 +348,7 @@ module LookupTable(	// scala/SFU.scala:357:7
   input  [16:0] io_in_bits_xl,	// scala/SFU.scala:358:14
   input         io_in_bits_sign,	// scala/SFU.scala:358:14
   input  [7:0]  io_in_bits_exp,	// scala/SFU.scala:358:14
-  input  [2:0]  io_in_bits_op,	// scala/SFU.scala:358:14
+  input  [3:0]  io_in_bits_op,	// scala/SFU.scala:358:14
   input         io_in_bits_bypass,	// scala/SFU.scala:358:14
   input  [31:0] io_in_bits_bypassVal,	// scala/SFU.scala:358:14
   input         io_out_ready,	// scala/SFU.scala:358:14
@@ -329,7 +359,7 @@ module LookupTable(	// scala/SFU.scala:357:7
   output [16:0] io_out_bits_xl,	// scala/SFU.scala:358:14
   output        io_out_bits_sign,	// scala/SFU.scala:358:14
   output [7:0]  io_out_bits_exp,	// scala/SFU.scala:358:14
-  output [2:0]  io_out_bits_op,	// scala/SFU.scala:358:14
+  output [3:0]  io_out_bits_op,	// scala/SFU.scala:358:14
   output        io_out_bits_bypass,	// scala/SFU.scala:358:14
   output [31:0] io_out_bits_bypassVal	// scala/SFU.scala:358:14
 );
@@ -341,7 +371,7 @@ module LookupTable(	// scala/SFU.scala:357:7
   reg  [16:0]        s1Pipe_rBits_xl;	// scala/SFU.scala:110:25
   reg                s1Pipe_rBits_sign;	// scala/SFU.scala:110:25
   reg  [7:0]         s1Pipe_rBits_exp;	// scala/SFU.scala:110:25
-  reg  [2:0]         s1Pipe_rBits_op;	// scala/SFU.scala:110:25
+  reg  [3:0]         s1Pipe_rBits_op;	// scala/SFU.scala:110:25
   reg                s1Pipe_rBits_bypass;	// scala/SFU.scala:110:25
   reg  [31:0]        s1Pipe_rBits_bypassVal;	// scala/SFU.scala:110:25
   wire               s1_ready = ~s1Pipe_rValid | io_out_ready;	// scala/SFU.scala:109:29, :111:{35,43}
@@ -2539,9 +2569,9 @@ module LookupTable(	// scala/SFU.scala:357:7
     else	// scala/SFU.scala:357:7
       s1Pipe_rValid <= _s1Pipe_T | ~(io_out_ready & s1Pipe_rValid) & s1Pipe_rValid;	// scala/SFU.scala:109:29, :114:36, :116:18, :117:31, :118:18, src/main/scala/chisel3/util/Decoupled.scala:51:35
     if (_s1Pipe_T) begin	// src/main/scala/chisel3/util/Decoupled.scala:51:35
-      s1Pipe_rBits_c0 <= _GEN_26[io_in_bits_op];	// scala/SFU.scala:110:25, :407:43
-      s1Pipe_rBits_c1 <= _GEN_27[io_in_bits_op];	// scala/SFU.scala:110:25, :407:43
-      s1Pipe_rBits_c2 <= _GEN_28[io_in_bits_op];	// scala/SFU.scala:110:25, :407:43
+      s1Pipe_rBits_c0 <= _GEN_26[io_in_bits_op[2:0]];
+      s1Pipe_rBits_c1 <= _GEN_27[io_in_bits_op[2:0]];
+      s1Pipe_rBits_c2 <= _GEN_28[io_in_bits_op[2:0]];
       s1Pipe_rBits_xl <= io_in_bits_xl;	// scala/SFU.scala:110:25
       s1Pipe_rBits_sign <= io_in_bits_sign;	// scala/SFU.scala:110:25
       s1Pipe_rBits_exp <= io_in_bits_exp;	// scala/SFU.scala:110:25
@@ -2603,7 +2633,7 @@ module Poly(	// scala/SFU.scala:435:7
   input  [16:0] io_in_bits_xl,	// scala/SFU.scala:436:14
   input         io_in_bits_sign,	// scala/SFU.scala:436:14
   input  [7:0]  io_in_bits_exp,	// scala/SFU.scala:436:14
-  input  [2:0]  io_in_bits_op,	// scala/SFU.scala:436:14
+  input  [3:0]  io_in_bits_op,	// scala/SFU.scala:436:14
   input         io_in_bits_bypass,	// scala/SFU.scala:436:14
   input  [31:0] io_in_bits_bypassVal,	// scala/SFU.scala:436:14
   input         io_out_ready,	// scala/SFU.scala:436:14
@@ -2611,7 +2641,7 @@ module Poly(	// scala/SFU.scala:435:7
   output [26:0] io_out_bits_polyResult,	// scala/SFU.scala:436:14
   output        io_out_bits_sign,	// scala/SFU.scala:436:14
   output [7:0]  io_out_bits_exp,	// scala/SFU.scala:436:14
-  output [2:0]  io_out_bits_op,	// scala/SFU.scala:436:14
+  output [3:0]  io_out_bits_op,	// scala/SFU.scala:436:14
   output        io_out_bits_bypass,	// scala/SFU.scala:436:14
   output [31:0] io_out_bits_bypassVal	// scala/SFU.scala:436:14
 );
@@ -2619,7 +2649,7 @@ module Poly(	// scala/SFU.scala:435:7
   wire        s3_ready;	// scala/SFU.scala:111:43
   wire        s2_ready;	// scala/SFU.scala:111:43
   reg         s1Pipe_rValid;	// scala/SFU.scala:109:29
-  reg  [2:0]  s1Pipe_rBits_op;	// scala/SFU.scala:110:25
+  reg  [3:0]  s1Pipe_rBits_op;	// scala/SFU.scala:110:25
   reg  [26:0] s1Pipe_rBits_c0;	// scala/SFU.scala:110:25
   reg  [16:0] s1Pipe_rBits_c1;	// scala/SFU.scala:110:25
   reg  [12:0] s1Pipe_rBits_c2;	// scala/SFU.scala:110:25
@@ -2631,7 +2661,7 @@ module Poly(	// scala/SFU.scala:435:7
   reg  [31:0] s1Pipe_rBits_bypassVal;	// scala/SFU.scala:110:25
   wire        s1_ready = ~s1Pipe_rValid | s2_ready;	// scala/SFU.scala:109:29, :111:{35,43}
   reg         s2Pipe_rValid;	// scala/SFU.scala:109:29
-  reg  [2:0]  s2Pipe_rBits_op;	// scala/SFU.scala:110:25
+  reg  [3:0]  s2Pipe_rBits_op;	// scala/SFU.scala:110:25
   reg  [26:0] s2Pipe_rBits_c0;	// scala/SFU.scala:110:25
   reg  [34:0] s2Pipe_rBits_c1Xl;	// scala/SFU.scala:110:25
   reg  [28:0] s2Pipe_rBits_c2Xl2;	// scala/SFU.scala:110:25
@@ -2644,7 +2674,7 @@ module Poly(	// scala/SFU.scala:435:7
   reg  [26:0] s3Pipe_rBits_polyResult;	// scala/SFU.scala:110:25
   reg         s3Pipe_rBits_sign;	// scala/SFU.scala:110:25
   reg  [7:0]  s3Pipe_rBits_exp;	// scala/SFU.scala:110:25
-  reg  [2:0]  s3Pipe_rBits_op;	// scala/SFU.scala:110:25
+  reg  [3:0]  s3Pipe_rBits_op;	// scala/SFU.scala:110:25
   reg         s3Pipe_rBits_bypass;	// scala/SFU.scala:110:25
   reg  [31:0] s3Pipe_rBits_bypassVal;	// scala/SFU.scala:110:25
   assign s3_ready = ~s3Pipe_rValid | io_out_ready;	// scala/SFU.scala:109:29, :111:{35,43}
@@ -2656,8 +2686,9 @@ module Poly(	// scala/SFU.scala:435:7
           ? 5'h13
           : io_in_bits_op == 3'h7 | io_in_bits_op == 3'h2
               ? 5'h11
-              : io_in_bits_op == 3'h1 | io_in_bits_op == 3'h0 ? 5'h13 : 5'h0);	// scala/SFU.scala:53:29, :442:32, :444:23
-  wire        _shift2_T = s2Pipe_rBits_op == 3'h0;	// scala/SFU.scala:53:29, :65:29, :110:25
+              : io_in_bits_op == 3'h1 | io_in_bits_op == 3'h0
+                | io_in_bits_op == 4'h8 ? 5'h13 : 5'h0);
+  wire        _shift2_T = s2Pipe_rBits_op == 3'h0 | s2Pipe_rBits_op == 4'h8;
   wire        _shift2_T_2 = s2Pipe_rBits_op == 3'h1;	// scala/SFU.scala:53:29, :65:29, :110:25
   wire        _shift2_T_4 = s2Pipe_rBits_op == 3'h2;	// scala/SFU.scala:53:29, :65:29, :110:25
   wire        _shift2_T_6 = s2Pipe_rBits_op == 3'h3;	// scala/SFU.scala:53:29, :65:29, :110:25
@@ -2799,7 +2830,7 @@ module Compose(	// scala/SFU.scala:527:7
   input  [26:0] io_in_bits_polyResult,	// scala/SFU.scala:528:14
   input         io_in_bits_sign,	// scala/SFU.scala:528:14
   input  [7:0]  io_in_bits_exp,	// scala/SFU.scala:528:14
-  input  [2:0]  io_in_bits_op,	// scala/SFU.scala:528:14
+  input  [3:0]  io_in_bits_op,	// scala/SFU.scala:528:14
   input         io_in_bits_bypass,	// scala/SFU.scala:528:14
   input  [31:0] io_in_bits_bypassVal,	// scala/SFU.scala:528:14
   input         io_out_ready,	// scala/SFU.scala:528:14
@@ -2922,7 +2953,11 @@ module Compose(	// scala/SFU.scala:527:7
       s1Pipe_rValid <= _s1Pipe_T | ~(io_out_ready & s1Pipe_rValid) & s1Pipe_rValid;	// scala/SFU.scala:109:29, :114:36, :116:18, :117:31, :118:18, src/main/scala/chisel3/util/Decoupled.scala:51:35
     if (_s1Pipe_T)	// src/main/scala/chisel3/util/Decoupled.scala:51:35
       s1Pipe_rBits_result <=
-        io_in_bits_bypass ? io_in_bits_bypassVal : _GEN_5[io_in_bits_op];	// scala/SFU.scala:110:25, :561:52, :575:28
+        io_in_bits_bypass
+          ? io_in_bits_bypassVal
+          : io_in_bits_op == 4'h8
+              ? {1'h0, _expSqrt_T, io_in_bits_polyResult[24:2]}
+              : _GEN_5[io_in_bits_op[2:0]];
   end // always @(posedge)
   `ifdef ENABLE_INITIAL_REG_	// scala/SFU.scala:527:7
     `ifdef FIRRTL_BEFORE_INITIAL	// scala/SFU.scala:527:7
@@ -2956,7 +2991,7 @@ module SFU(	// scala/SFU.scala:580:7
   output        io_in_ready,	// scala/SFU.scala:581:14
   input         io_in_valid,	// scala/SFU.scala:581:14
   input  [31:0] io_in_bits_x,	// scala/SFU.scala:581:14
-  input  [2:0]  io_in_bits_op,	// scala/SFU.scala:581:14
+  input  [3:0]  io_in_bits_op,	// scala/SFU.scala:581:14
   input         io_out_ready,	// scala/SFU.scala:581:14
   output        io_out_valid,	// scala/SFU.scala:581:14
   output [31:0] io_out_bits_result	// scala/SFU.scala:581:14
@@ -2968,7 +3003,7 @@ module SFU(	// scala/SFU.scala:580:7
   wire [26:0] _poly_io_out_bits_polyResult;	// scala/SFU.scala:601:20
   wire        _poly_io_out_bits_sign;	// scala/SFU.scala:601:20
   wire [7:0]  _poly_io_out_bits_exp;	// scala/SFU.scala:601:20
-  wire [2:0]  _poly_io_out_bits_op;	// scala/SFU.scala:601:20
+  wire [3:0]  _poly_io_out_bits_op;	// scala/SFU.scala:601:20
   wire        _poly_io_out_bits_bypass;	// scala/SFU.scala:601:20
   wire [31:0] _poly_io_out_bits_bypassVal;	// scala/SFU.scala:601:20
   wire        _lut_io_in_ready;	// scala/SFU.scala:597:19
@@ -2979,7 +3014,7 @@ module SFU(	// scala/SFU.scala:580:7
   wire [16:0] _lut_io_out_bits_xl;	// scala/SFU.scala:597:19
   wire        _lut_io_out_bits_sign;	// scala/SFU.scala:597:19
   wire [7:0]  _lut_io_out_bits_exp;	// scala/SFU.scala:597:19
-  wire [2:0]  _lut_io_out_bits_op;	// scala/SFU.scala:597:19
+  wire [3:0]  _lut_io_out_bits_op;	// scala/SFU.scala:597:19
   wire        _lut_io_out_bits_bypass;	// scala/SFU.scala:597:19
   wire [31:0] _lut_io_out_bits_bypassVal;	// scala/SFU.scala:597:19
   wire        _rangeReduce_io_in_ready;	// scala/SFU.scala:593:27
@@ -2988,14 +3023,14 @@ module SFU(	// scala/SFU.scala:580:7
   wire [16:0] _rangeReduce_io_out_bits_xl;	// scala/SFU.scala:593:27
   wire        _rangeReduce_io_out_bits_sign;	// scala/SFU.scala:593:27
   wire [7:0]  _rangeReduce_io_out_bits_exp;	// scala/SFU.scala:593:27
-  wire [2:0]  _rangeReduce_io_out_bits_op;	// scala/SFU.scala:593:27
+  wire [3:0]  _rangeReduce_io_out_bits_op;	// scala/SFU.scala:593:27
   wire        _rangeReduce_io_out_bits_bypass;	// scala/SFU.scala:593:27
   wire [31:0] _rangeReduce_io_out_bits_bypassVal;	// scala/SFU.scala:593:27
   wire        _filter_io_out_valid;	// scala/SFU.scala:587:22
   wire        _filter_io_out_bits_sign;	// scala/SFU.scala:587:22
   wire [7:0]  _filter_io_out_bits_exponent;	// scala/SFU.scala:587:22
   wire [22:0] _filter_io_out_bits_mantissa;	// scala/SFU.scala:587:22
-  wire [2:0]  _filter_io_out_bits_op;	// scala/SFU.scala:587:22
+  wire [3:0]  _filter_io_out_bits_op;	// scala/SFU.scala:587:22
   wire        _filter_io_out_bits_bypass;	// scala/SFU.scala:587:22
   wire [31:0] _filter_io_out_bits_bypassVal;	// scala/SFU.scala:587:22
   Filter filter (	// scala/SFU.scala:587:22
