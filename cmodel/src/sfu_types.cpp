@@ -6,9 +6,10 @@ const FunctionParams Function::RCP = {7, 1, -1, 1, 0, 0, 0};
 const FunctionParams Function::SQRT = {6, 1, 1, -1, 0, -1, -3};
 const FunctionParams Function::RSQRT = {6, 1, -1, 1, 0, -1, -1};
 const FunctionParams Function::SIN = {6, 1, 1, -1, 0, 1, 1};
-// Approximate sigmoid(-|x|) over |x| / 8 in [0, 1). C0 uses Q0.26;
-// C1/C2 retain enough headroom for derivatives with respect to |x| / 8.
-const FunctionParams Function::SIGMOID = {7, 1, -1, 1, -1, 1, 1};
+// TANH and SIGMOID share a Q0.26 approximation of tanh(|x|).  SIGMOID
+// supplies |x|/2 during range reduction and reconstructs (1 +/- tanh)/2.
+const FunctionParams Function::TANH = {7, 1, 1, -1, -1, 1, 4};
+const FunctionParams Function::SIGMOID = Function::TANH;
 // EXP reuses the EXP2 interpolation table after x * log2(e) range reduction.
 const FunctionParams Function::EXP = {6, 1, 1, 1, 1, 1, -1};
 
@@ -32,6 +33,8 @@ const FunctionParams &Function::get(SFUOp op) {
     return SIGMOID;
   case SFUOp::EXP:
     return EXP;
+  case SFUOp::TANH:
+    return TANH;
   default:
     return EXP2;
   }

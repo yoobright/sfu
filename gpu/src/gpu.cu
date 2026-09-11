@@ -37,15 +37,18 @@ __global__ void sfu_kernel(const float *inputs, float *outputs, int n, int op) {
     result = cosf(input);
     break;
   case 7:
-    if (input >= 0.0f) {
-      result = 1.0f / (1.0f + expf(-input));
-    } else {
-      float exp_x = expf(input);
-      result = exp_x / (1.0f + exp_x);
-    }
+    result = input <= -8.0f
+                 ? 0.0f
+                 : (input >= 8.0f
+                        ? 1.0f
+                        : 0.5f * (tanhf(0.5f * input) + 1.0f));
     break;
   case 8:
     result = input < -16.0f ? 0.0f : (input > 0.0f ? 1.0f : expf(input));
+    break;
+  case 9:
+    result = input <= -8.0f ? -1.0f
+                            : (input >= 8.0f ? 1.0f : tanhf(input));
     break;
   default:
     result = 0.0f;

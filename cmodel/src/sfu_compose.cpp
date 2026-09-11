@@ -14,6 +14,20 @@ static int count_leading_zeros(uint64_t x) {
   return count;
 }
 
+// Convert an unsigned Q0.26 magnitude to FP32 without adding another
+// approximation stage. The polynomial table is generated for this exact
+// truncating normalization behavior.
+static uint32_t q26_to_float(uint32_t fixed, uint8_t sign = 0) {
+  if (fixed == 0)
+    return static_cast<uint32_t>(sign) << 31;
+  int leading_bit = 31 - __builtin_clz(fixed);
+  uint8_t exp_out = static_cast<uint8_t>(leading_bit + 101);
+  uint32_t normalized = leading_bit > 23 ? fixed >> (leading_bit - 23)
+                                         : fixed << (23 - leading_bit);
+  return (static_cast<uint32_t>(sign) << 31) |
+         (static_cast<uint32_t>(exp_out) << 23) | (normalized & 0x7FFFFF);
+}
+
 uint32_t SFUCompose::compose(const PolyOutput &input, SFUOp op) {
   uint32_t result = 0;
   uint32_t poly_result = input.result;
@@ -77,23 +91,14 @@ uint32_t SFUCompose::compose(const PolyOutput &input, SFUOp op) {
     break;
   }
   case SFUOp::SIGMOID: {
-    // The LUT approximates h = sigmoid(-|x|) in unsigned Q0.26.  Reconstruct
-    // positive inputs with sigmoid(x) = 1 - h, then normalize to FP32.
+    uint32_t half_tanh = poly_result >> 1;
     uint32_t sigmoid_fixed =
-        sign ? poly_result : ((1U << 26) - poly_result);
-
-    if (sigmoid_fixed == 0) {
-      result = 0;
-      break;
-    }
-
-    int leading_bit = 31 - __builtin_clz(sigmoid_fixed);
-    uint8_t exp_out = static_cast<uint8_t>(leading_bit + 101);
-    uint32_t normalized = leading_bit > 23
-                              ? sigmoid_fixed >> (leading_bit - 23)
-                              : sigmoid_fixed << (23 - leading_bit);
-    uint32_t mant_out = normalized & 0x7FFFFF;
-    result = (static_cast<uint32_t>(exp_out) << 23) | mant_out;
+        sign ? ((1U << 25) - half_tanh) : ((1U << 25) + half_tanh);
+    result = q26_to_float(sigmoid_fixed);
+    break;
+  }
+  case SFUOp::TANH: {
+    result = q26_to_float(poly_result, sign);
     break;
   }
   }

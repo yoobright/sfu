@@ -104,13 +104,22 @@ FilterOutput SFUFilter::filter(uint32_t input_bits, SFUOp op) {
     }
     break;
   case SFUOp::SIGMOID:
-    if (is_inf || (input_bits & 0x7FFFFFFF) >= 0x40C00000) {
+    if (is_inf || (input_bits & 0x7FFFFFFF) >= 0x41000000) {
       out.bypass = true;
       out.bypass_val = sign ? 0x00000000 : 0x3F800000;
     } else if (exp == 0) {
       // Zero and subnormal inputs round to exactly 0.5 in this datapath.
       out.bypass = true;
       out.bypass_val = 0x3F000000;
+    }
+    break;
+  case SFUOp::TANH:
+    if (is_inf || (input_bits & 0x7FFFFFFF) >= 0x41000000) {
+      out.bypass = true;
+      out.bypass_val = sign ? 0xBF800000 : 0x3F800000;
+    } else if (is_zero) {
+      out.bypass = true;
+      out.bypass_val = input_bits;
     }
     break;
   case SFUOp::EXP:

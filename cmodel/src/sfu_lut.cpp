@@ -12,7 +12,7 @@ std::vector<LUTEntry> SFULUT::sqrt_odd_lut;
 std::vector<LUTEntry> SFULUT::rsqrt_even_lut;
 std::vector<LUTEntry> SFULUT::rsqrt_odd_lut;
 std::vector<LUTEntry> SFULUT::sin_lut;
-std::vector<LUTEntry> SFULUT::sigmoid_lut;
+std::vector<LUTEntry> SFULUT::tanh_lut;
 
 std::vector<LUTEntry> SFULUT::load_lut(const char *filename, int num_entries) {
   std::vector<LUTEntry> lut;
@@ -40,7 +40,7 @@ std::vector<LUTEntry> SFULUT::load_lut(const char *filename, int num_entries) {
   return lut;
 }
 
-void SFULUT::init(uint32_t sigmoid_lut_entries) {
+void SFULUT::init() {
   const char *lut_path = std::getenv("LUT_PATH");
   std::string base_path = lut_path ? lut_path : "../lut";
 
@@ -52,11 +52,7 @@ void SFULUT::init(uint32_t sigmoid_lut_entries) {
   rsqrt_even_lut = load_lut((base_path + "/rsqrt-even-coeffs.txt").c_str(), 64);
   rsqrt_odd_lut = load_lut((base_path + "/rsqrt-odd-coeffs.txt").c_str(), 64);
   sin_lut = load_lut((base_path + "/sin-coeffs.txt").c_str(), 64);
-  const char *sigmoid_filename = sigmoid_lut_entries == 64
-                                     ? "sigmoid-64-coeffs.txt"
-                                     : "sigmoid-coeffs.txt";
-  sigmoid_lut = load_lut((base_path + "/" + sigmoid_filename).c_str(),
-                         sigmoid_lut_entries);
+  tanh_lut = load_lut((base_path + "/tanh-coeffs.txt").c_str(), 128);
 }
 
 LUTOutput SFULUT::lookup(const RangeReduceOutput &input, SFUOp op) {
@@ -100,7 +96,8 @@ LUTOutput SFULUT::lookup(const RangeReduceOutput &input, SFUOp op) {
     index &= 0x3F;
     break;
   case SFUOp::SIGMOID:
-    lut_ptr = &sigmoid_lut;
+  case SFUOp::TANH:
+    lut_ptr = &tanh_lut;
     break;
   }
 

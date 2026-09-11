@@ -6,7 +6,7 @@
 
 class SFUCore {
 public:
-  static void init(uint32_t sigmoid_lut_entries = 128);
+  static void init();
   static float compute(float input, SFUOp op);
 };
 
