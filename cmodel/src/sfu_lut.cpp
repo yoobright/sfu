@@ -71,6 +71,7 @@ LUTOutput SFULUT::lookup(const RangeReduceOutput &input, SFUOp op) {
 
   switch (op) {
   case SFUOp::EXP2:
+  case SFUOp::EXP:
     lut_ptr = &exp2_lut;
     index &= 0x3F;
     break;

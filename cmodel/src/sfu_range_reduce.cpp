@@ -41,6 +41,18 @@ RangeReduceOutput SFURangeReduce::reduce(const FilterOutput &input, SFUOp op) {
                                  : frac_part;
   uint8_t quadrand = int_part & 0x3;
 
+  // log2(e), Q1.31. EXP first maps e^x to 2^(x * log2(e)); the rounded
+  // product remains Q?.23 so it can use the existing EXP2 split and LUT.
+  constexpr uint64_t LOG2_E_Q31 = 3098164009ULL;
+  uint64_t exp_scaled =
+      (sig_shifted * LOG2_E_Q31 + (1ULL << 30)) >> 31;
+  uint32_t exp_int_part = (exp_scaled >> 23) & 0xFF;
+  uint32_t exp_frac_part = exp_scaled & 0x7FFFFF;
+  uint32_t exp_frac_part_floor =
+      exp_frac_part == 0 ? 0 : ((~exp_frac_part + 1) & 0x7FFFFF);
+  uint8_t exp_int_part_floor =
+      exp_frac_part == 0 ? exp_int_part : exp_int_part + 1;
+
   out.sign = input.sign;
 
   switch (op) {
@@ -48,6 +60,12 @@ RangeReduceOutput SFURangeReduce::reduce(const FilterOutput &input, SFUOp op) {
     out.exp = (input.sign) ? -int_part_floor : int_part_floor;
     out.index = (frac_part_floor >> 17) & 0x3F;
     out.xl = frac_part_floor & 0x1FFFF;
+    break;
+
+  case SFUOp::EXP:
+    out.exp = -static_cast<int8_t>(exp_int_part_floor);
+    out.index = (exp_frac_part_floor >> 17) & 0x3F;
+    out.xl = exp_frac_part_floor & 0x1FFFF;
     break;
 
   case SFUOp::LOG2:

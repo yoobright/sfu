@@ -47,6 +47,8 @@ SFUOp parse_op(const char *str) {
     return SFUOp::COS;
   if (strcmp(str, "sigmoid") == 0)
     return SFUOp::SIGMOID;
+  if (strcmp(str, "exp") == 0)
+    return SFUOp::EXP;
   std::cerr << "Unknown operation: " << str << std::endl;
   exit(1);
 }
@@ -83,8 +85,8 @@ void compute_batch(ImplType type, const std::vector<float> &inputs,
 }
 
 void test_operation(SFUOp op, ImplType dut_type, ImplType ref_type) {
-  const char *op_names[] = {"EXP2",  "LOG2", "RCP", "SQRT",
-                            "RSQRT", "SIN",  "COS", "SIGMOID"};
+  const char *op_names[] = {"EXP2",  "LOG2", "RCP", "SQRT", "RSQRT",
+                            "SIN",   "COS",  "SIGMOID", "EXP"};
   const char *impl_names[] = {"CHISEL", "CMODEL", "CPU", "GPU", "MPFR"};
 
   std::cout << "\n--- Testing " << op_names[static_cast<int>(op)]
@@ -171,7 +173,7 @@ void print_usage(const char *prog) {
                "(chisel|cmodel|cpu|gpu|mpfr)\n";
   std::cout
       << "  --op <op>       Operation "
-         "(exp2|log2|rcp|sqrt|rsqrt|sin|cos|sigmoid|all)\n";
+         "(exp2|log2|rcp|sqrt|rsqrt|sin|cos|sigmoid|exp|all)\n";
   std::cout << "  --help          Show this help\n";
 }
 
@@ -203,7 +205,7 @@ int main(int argc, char **argv) {
 #endif
 
   if (op_str == "all") {
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < 9; i++) {
       test_operation(static_cast<SFUOp>(i), dut_type, ref_type);
     }
   } else {

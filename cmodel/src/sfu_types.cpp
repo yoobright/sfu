@@ -9,6 +9,8 @@ const FunctionParams Function::SIN = {6, 1, 1, -1, 0, 1, 1};
 // Approximate sigmoid(-|x|) over |x| / 8 in [0, 1). C0 uses Q0.26;
 // C1/C2 retain enough headroom for derivatives with respect to |x| / 8.
 const FunctionParams Function::SIGMOID = {7, 1, -1, 1, -1, 1, 1};
+// EXP reuses the EXP2 interpolation table after x * log2(e) range reduction.
+const FunctionParams Function::EXP = {6, 1, 1, 1, 1, 1, -1};
 
 const FunctionParams &Function::get(SFUOp op) {
   switch (op) {
@@ -28,6 +30,8 @@ const FunctionParams &Function::get(SFUOp op) {
     return SIN;
   case SFUOp::SIGMOID:
     return SIGMOID;
+  case SFUOp::EXP:
+    return EXP;
   default:
     return EXP2;
   }

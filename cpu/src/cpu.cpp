@@ -24,6 +24,14 @@ float CPU::compute(float input, SFUOp op) {
       float exp_x = expf(input);
       return exp_x / (1.0f + exp_x);
     }
+  case SFUOp::EXP:
+    if (std::isnan(input))
+      return input;
+    if (input < -16.0f)
+      return 0.0f;
+    if (input > 0.0f)
+      return 1.0f;
+    return expf(input);
   default:
     return 0.0f;
   }

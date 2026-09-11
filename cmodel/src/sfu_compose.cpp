@@ -21,7 +21,8 @@ uint32_t SFUCompose::compose(const PolyOutput &input, SFUOp op) {
   uint8_t sign = input.sign;
 
   switch (op) {
-  case SFUOp::EXP2: {
+  case SFUOp::EXP2:
+  case SFUOp::EXP: {
     uint8_t exp_out = (127 + exp) & 0xFF;
     uint32_t mant_out = (poly_result >> 2) & 0x7FFFFF;
     result = (exp_out << 23) | mant_out;

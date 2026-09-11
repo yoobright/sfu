@@ -44,6 +44,9 @@ __global__ void sfu_kernel(const float *inputs, float *outputs, int n, int op) {
       result = exp_x / (1.0f + exp_x);
     }
     break;
+  case 8:
+    result = input < -16.0f ? 0.0f : (input > 0.0f ? 1.0f : expf(input));
+    break;
   default:
     result = 0.0f;
   }
