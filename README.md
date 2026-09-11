@@ -58,6 +58,9 @@ For **TANH/SIGMOID**, one 128-entry LUT approximates $\tanh(|x|)$ in unsigned
 Q0.26. TANH applies odd symmetry. SIGMOID reuses the same range reducer,
 polynomial, and LUT by addressing it with $|x|/2$, then composing
 $\sigma(x)=(1+\tanh(x/2))/2$. Both operations saturate at $|x|\ge8$.
+For $|x|<2^{-11}$, TANH directly returns the FP32 input using
+$\tanh(x)\approx x$; this preserves `±0` and subnormals and avoids magnifying
+the fixed Q0.26 output step into thousands of ULPs near zero.
 
 The table uses power-of-two interval widths: 64 × $1/64$ over $[0,1)$,
 48 × $1/16$ over $[1,4)$, and 16 × $1/4$ over $[4,8)$. Coefficients come
@@ -77,6 +80,7 @@ S0: Filter (1 cycle)
     - Handle out-of-range inputs for EXP2 (overflow/underflow)
     - Clip EXP below -16 to 0 and above 0 to 1
     - Saturate TANH/SIGMOID when |x| >= 8
+    - Bypass TANH with the original input when |x| < 2^-11
     - Handle negative inputs for LOG2, SQRT, RSQRT
     - Output bypass flag and bypass value for special cases
     - Pass normal inputs to next stage
@@ -234,19 +238,56 @@ Coefficients are optimized offline using the `optimizer` tool to minimize the wo
 
 ### SIGMOID
 
-The shared-TANH implementation has a sampled worst-case absolute error of
-$5.960\times10^{-7}$ over the non-saturated positive domain. Its regression
-also verifies that `SIGMOID(x)` and `TANH(x/2)` produce identical LUT indices
-and local interpolation arguments. Run `make accuracy-sigmoid` to reproduce
-the interval results.
+The C model is compared with the FP32 rounding of a double-precision
+$\frac{1+\tanh(x/2)}{2}$ reference. Each interval contains 1,048,576 uniformly
+spaced samples.
+
+| Interval | MaxAbsErr | MaxULP |
+|----------|-----------|--------|
+| **[0, 0.5)** | 2.384186e-07 | 4 |
+| **[0.5, 1)** | 1.788139e-07 | 3 |
+| **[1, 2)** | 1.192093e-07 | 2 |
+| **[2, 4)** | **5.960464e-07** | **10** |
+| **[4, 6)** | 2.384186e-07 | 4 |
+| **[6, 8)** | 1.788139e-07 | 3 |
+
+The shared-path regression also verifies that `SIGMOID(x)` and `TANH(x/2)`
+produce identical LUT indices and local interpolation arguments. Their final
+FP32 results differ by at most 5.960464e-08 (one ULP around 0.5), due only to
+the order of fixed-point composition and FP32 normalization. The maximum
+quantization-induced monotonic reversal is 1.788139e-07.
+
+Run `make accuracy-sigmoid` for the interval table and `make test-cmodel` for
+the shared-path, special-value, saturation, and monotonicity checks.
 
 ### TANH
 
 The coefficient generator's exhaustive fixed-point check reports a worst-case
 absolute error of $9.274\times10^{-7}$ on $[0,8)$. The FP32 C-model interval
-test reports at most $1.143\times10^{-6}$ after input reduction and output
-normalization. ULP is not a useful bound near zero, so TANH is specified by
-absolute error. Run `make accuracy-tanh` to reproduce the results.
+test reports the following results after input reduction and output
+normalization. Each interval contains 1,048,576 uniformly spaced samples.
+
+| Interval | MaxAbsErr | MaxULP | WorstULPX |
+|----------|-----------|--------|-----------|
+| **[0, 1)** | 2.384186e-07 | **237** | 1.317549e-02 |
+| **[1, 2)** | **1.132488e-06** | 19 | 1.075612e+00 |
+| **[2, 4)** | 3.576279e-07 | 6 | 2.000003e+00 |
+| **[4, 6)** | 4.172325e-07 | 7 | 4.047477e+00 |
+| **[6, 8)** | 2.384186e-07 | 4 | 7.488652e+00 |
+
+The full-domain `[-8,8]` regression samples 4,194,305 points and reports a
+maximum absolute error of 9.70154e-07 and a maximum quantization-induced
+monotonic reversal of 3.57628e-07. The $|x|<2^{-11}$ bypass reduces the
+`[0,1)` result from 2048 to 237 ULP. The remaining worst ULP occurs near
+$x=0.0131755$, outside the bypass region, where an absolute error of
+$2.20723\times10^{-7}$ spans 237 FP32 ULPs. Thus ULP is reported for
+completeness but is not a stable TANH error metric near zero; absolute error
+remains the primary bound. The regression explicitly checks positive and
+negative values immediately below $2^{-11}$, the exact boundary, subnormals,
+`±0`, `±Inf`, NaN, and the `±8` saturation boundaries.
+
+Run `make accuracy-tanh` for the interval table and `make test-cmodel` for the
+full-domain and special-value regression.
 
 ### EXP
 

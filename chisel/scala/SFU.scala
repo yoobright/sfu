@@ -278,9 +278,10 @@ class Filter extends Module {
     ))
   }.elsewhen(io.in.bits.op === SFUOp.TANH) {
     val saturate = io.in.bits.x(30, 0) >= "h41000000".U(31.W) // |x| >= 8
-    bypass := isZero || isInf || isNaN || saturate
+    val small = io.in.bits.x(30, 0) < "h3A000000".U(31.W) // |x| < 2^-11
+    bypass := small || isInf || isNaN || saturate
     bypassVal := MuxCase(SFUParameters.POS_ZERO, Seq(
-      isZero   -> Mux(isNeg, SFUParameters.NEG_ZERO, SFUParameters.POS_ZERO),
+      small    -> io.in.bits.x,
       isInf    -> Mux(isNeg, SFUParameters.NEG_ONE, SFUParameters.POS_ONE),
       isNaN    -> SFUParameters.NAN,
       saturate -> Mux(isNeg, SFUParameters.NEG_ONE, SFUParameters.POS_ONE)
