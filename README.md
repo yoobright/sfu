@@ -234,19 +234,51 @@ Coefficients are optimized offline using the `optimizer` tool to minimize the wo
 
 ### SIGMOID
 
-The shared-TANH implementation has a sampled worst-case absolute error of
-$5.960\times10^{-7}$ over the non-saturated positive domain. Its regression
-also verifies that `SIGMOID(x)` and `TANH(x/2)` produce identical LUT indices
-and local interpolation arguments. Run `make accuracy-sigmoid` to reproduce
-the interval results.
+The C model is compared with the FP32 rounding of a double-precision
+$\frac{1+\tanh(x/2)}{2}$ reference. Each interval contains 1,048,576 uniformly
+spaced samples.
+
+| Interval | MaxAbsErr | MaxULP |
+|----------|-----------|--------|
+| **[0, 0.5)** | 2.384186e-07 | 4 |
+| **[0.5, 1)** | 1.788139e-07 | 3 |
+| **[1, 2)** | 1.192093e-07 | 2 |
+| **[2, 4)** | **5.960464e-07** | **10** |
+| **[4, 6)** | 2.384186e-07 | 4 |
+| **[6, 8)** | 1.788139e-07 | 3 |
+
+The shared-path regression also verifies that `SIGMOID(x)` and `TANH(x/2)`
+produce identical LUT indices and local interpolation arguments. Their final
+FP32 results differ by at most 5.960464e-08 (one ULP around 0.5), due only to
+the order of fixed-point composition and FP32 normalization. The maximum
+quantization-induced monotonic reversal is 1.788139e-07.
+
+Run `make accuracy-sigmoid` for the interval table and `make test-cmodel` for
+the shared-path, special-value, saturation, and monotonicity checks.
 
 ### TANH
 
 The coefficient generator's exhaustive fixed-point check reports a worst-case
 absolute error of $9.274\times10^{-7}$ on $[0,8)$. The FP32 C-model interval
-test reports at most $1.143\times10^{-6}$ after input reduction and output
-normalization. ULP is not a useful bound near zero, so TANH is specified by
-absolute error. Run `make accuracy-tanh` to reproduce the results.
+test reports the following results after input reduction and output
+normalization. Each interval contains 1,048,576 uniformly spaced samples.
+
+| Interval | MaxAbsErr |
+|----------|-----------|
+| **[0, 1)** | 2.310302e-07 |
+| **[1, 2)** | **1.142705e-06** |
+| **[2, 4)** | 3.611519e-07 |
+| **[4, 6)** | 4.105278e-07 |
+| **[6, 8)** | 2.226594e-07 |
+
+The full-domain `[-8,8]` regression samples 4,194,305 points and reports a
+maximum absolute error of 9.70154e-07 and a maximum quantization-induced
+monotonic reversal of 3.57628e-07. ULP is not a useful bound near zero, so
+TANH is specified by absolute error. `±0`, `±Inf`, NaN, and the `±8`
+saturation boundaries are also checked.
+
+Run `make accuracy-tanh` for the interval table and `make test-cmodel` for the
+full-domain and special-value regression.
 
 ### EXP
 
