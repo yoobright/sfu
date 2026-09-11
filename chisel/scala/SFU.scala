@@ -13,6 +13,7 @@ object SFUOp {
   val COS     = 6.U(4.W)
   val SIGMOID = 7.U(4.W)
   val EXP      = 8.U(4.W)
+  val TANH     = 9.U(4.W)
 }
 
 // just for readability, do not change values
@@ -50,7 +51,8 @@ object Function {
   val SQRT  = FunctionParams(6, 1,  1, -1, 0, -1, -3)
   val RSQRT = FunctionParams(6, 1, -1,  1, 0, -1, -1)
   val SIN   = FunctionParams(6, 1,  1,  -1, 0,  1, 1)
-  val SIGMOID = FunctionParams(7, 1, -1, 1, -1, 1, 1)
+  val TANH = FunctionParams(7, 1, 1, -1, -1, 1, 4)
+  val SIGMOID = TANH
   val EXP = EXP2
 
   def getShift0(op: UInt): UInt = {
@@ -63,7 +65,8 @@ object Function {
       SFUOp.SIN   -> SIN.shift0.U(5.W),
       SFUOp.COS   -> SIN.shift0.U(5.W),
       SFUOp.SIGMOID -> SIGMOID.shift0.U(5.W),
-      SFUOp.EXP -> EXP.shift0.U(5.W)
+      SFUOp.EXP -> EXP.shift0.U(5.W),
+      SFUOp.TANH -> TANH.shift0.U(5.W)
     ))
   }
 
@@ -77,7 +80,8 @@ object Function {
       SFUOp.SIN   -> SIN.shift1.U(5.W),
       SFUOp.COS   -> SIN.shift1.U(5.W),
       SFUOp.SIGMOID -> SIGMOID.shift1.U(5.W),
-      SFUOp.EXP -> EXP.shift1.U(5.W)
+      SFUOp.EXP -> EXP.shift1.U(5.W),
+      SFUOp.TANH -> TANH.shift1.U(5.W)
     ))
   }
   def getShift2(op: UInt): UInt = {
@@ -90,7 +94,8 @@ object Function {
       SFUOp.SIN   -> SIN.shift2.U(5.W),
       SFUOp.COS   -> SIN.shift2.U(5.W),
       SFUOp.SIGMOID -> SIGMOID.shift2.U(5.W),
-      SFUOp.EXP -> EXP.shift2.U(5.W)
+      SFUOp.EXP -> EXP.shift2.U(5.W),
+      SFUOp.TANH -> TANH.shift2.U(5.W)
     ))
   }
 
@@ -263,13 +268,22 @@ class Filter extends Module {
       isNaN  -> SFUParameters.NAN
     ))
   }.elsewhen(io.in.bits.op === SFUOp.SIGMOID) {
-    val saturate = io.in.bits.x(30, 0) >= "h40C00000".U(31.W) // |x| >= 6
+    val saturate = io.in.bits.x(30, 0) >= "h41000000".U(31.W) // |x| >= 8
     bypass    := isZero || isInf || isNaN || saturate
     bypassVal := MuxCase(SFUParameters.POS_ZERO, Seq(
       isZero   -> "h3F000000".U(32.W),
       isInf    -> Mux(isNeg, SFUParameters.POS_ZERO, SFUParameters.POS_ONE),
       isNaN    -> SFUParameters.NAN,
       saturate -> Mux(isNeg, SFUParameters.POS_ZERO, SFUParameters.POS_ONE)
+    ))
+  }.elsewhen(io.in.bits.op === SFUOp.TANH) {
+    val saturate = io.in.bits.x(30, 0) >= "h41000000".U(31.W) // |x| >= 8
+    bypass := isZero || isInf || isNaN || saturate
+    bypassVal := MuxCase(SFUParameters.POS_ZERO, Seq(
+      isZero   -> Mux(isNeg, SFUParameters.NEG_ZERO, SFUParameters.POS_ZERO),
+      isInf    -> Mux(isNeg, SFUParameters.NEG_ONE, SFUParameters.POS_ONE),
+      isNaN    -> SFUParameters.NAN,
+      saturate -> Mux(isNeg, SFUParameters.NEG_ONE, SFUParameters.POS_ONE)
     ))
   }.elsewhen(io.in.bits.op === SFUOp.EXP) {
     val belowRange = isNeg && io.in.bits.x(30, 0) > "h41800000".U(31.W)
@@ -345,25 +359,24 @@ class RangeReduce extends Module {
   val fracSin  = Mux(quadrant(0), fracPartInv , fracPart)
   val fracCos  = Mux(quadrant(0), fracPart    , fracPartInv)
 
-  // SIN-like region selection makes all 128 sigmoid entries reachable using
-  // only bit slices.  [0,2) has 64 x 1/32 intervals; [2,6) has 64 x 1/16.
-  // Values at or above 6 bypass in Filter.
-  val sigmoidFineRegion = intPart < 2.U
-  val sigmoidIndex = Mux(
-    sigmoidFineRegion,
-    sigShifted(24, 18),
-    sigShifted(25, 19) + 32.U
-  )
-  val sigmoidLocal = Mux(
-    sigmoidFineRegion,
-    sigShifted(17, 2),
-    sigShifted(18, 3)
-  )
+  // TANH uses |x|; SIGMOID shares its range reducer and LUT with |x|/2.
+  // The 128 entries cover [0,1), [1,4), and [4,8) with power-of-two widths.
+  val tanhArg = Mux(op === SFUOp.SIGMOID, sigShifted >> 1, sigShifted)
+  val tanhFine = tanhArg < (1.U << 23)
+  val tanhMiddle = tanhArg < (4.U << 23)
+  val tanhMiddleDelta = tanhArg - (1.U << 23)
+  val tanhCoarseDelta = tanhArg - (4.U << 23)
+  val tanhIndex = Mux(tanhFine, Cat(0.U(1.W), tanhArg(22, 17)),
+    Mux(tanhMiddle, 64.U(7.W) + tanhMiddleDelta(24, 19),
+                    112.U(7.W) + tanhCoarseDelta(25, 21)))
+  val tanhLocal = Mux(tanhFine, tanhArg(16, 1),
+    Mux(tanhMiddle, tanhMiddleDelta(18, 3), tanhCoarseDelta(20, 5)))
 
   val signFinal = MuxLookup(op, sign.asUInt) (Seq(
     SFUOp.SIN -> signSin,
     SFUOp.COS -> signCos,
-    SFUOp.SIGMOID -> sign.asUInt
+    SFUOp.SIGMOID -> sign.asUInt,
+    SFUOp.TANH -> sign.asUInt
   ))
 
   val exp = MuxLookup(op, 0.S(8.W)) (Seq(
@@ -375,7 +388,8 @@ class RangeReduce extends Module {
     SFUOp.SIN   -> 0.S(8.W),
     SFUOp.COS   -> 0.S(8.W),
     SFUOp.SIGMOID -> 0.S(8.W),
-    SFUOp.EXP -> -(expIntPartFloor.asSInt)
+    SFUOp.EXP -> -(expIntPartFloor.asSInt),
+    SFUOp.TANH -> 0.S(8.W)
   ))
 
   val index = MuxLookup(op, 0.U(7.W)) (Seq(
@@ -386,7 +400,8 @@ class RangeReduce extends Module {
     SFUOp.RSQRT -> Cat(expSigned(0), mantissa(22, 17)),
     SFUOp.SIN   -> Cat(0.U(1.W), fracSin(22, 17)),
     SFUOp.COS   -> Cat(0.U(1.W), fracCos(22, 17)),
-    SFUOp.SIGMOID -> sigmoidIndex,
+    SFUOp.SIGMOID -> tanhIndex,
+    SFUOp.TANH -> tanhIndex,
     SFUOp.EXP -> Cat(0.U(1.W), expFracPartFloor(22, 17))
   ))
 
@@ -398,7 +413,8 @@ class RangeReduce extends Module {
     SFUOp.RSQRT -> mantissa(16, 0),
     SFUOp.SIN   -> fracSin(16, 0),
     SFUOp.COS   -> fracCos(16, 0),
-    SFUOp.SIGMOID -> Cat(0.U(1.W), sigmoidLocal),
+    SFUOp.SIGMOID -> Cat(0.U(1.W), tanhLocal),
+    SFUOp.TANH -> Cat(0.U(1.W), tanhLocal),
     SFUOp.EXP -> expFracPartFloor(16, 0)
   ))
  
@@ -463,7 +479,7 @@ class LookupTable extends Module {
   val rsqrtEvenLUT = VecInit(loadLUT(s"$lutPath/rsqrt-even-coeffs.txt", Function.RSQRT.c0Sign, Function.RSQRT.c1Sign, Function.RSQRT.c2Sign))
   val rsqrtOddLUT  = VecInit(loadLUT(s"$lutPath/rsqrt-odd-coeffs.txt",  Function.RSQRT.c0Sign, Function.RSQRT.c1Sign, Function.RSQRT.c2Sign))
   val sinLUT       = VecInit(loadLUT(s"$lutPath/sin-coeffs.txt",        Function.SIN.c0Sign,   Function.SIN.c1Sign,   Function.SIN.c2Sign))
-  val sigmoidLUT   = VecInit(loadLUT(s"$lutPath/sigmoid-coeffs.txt",    Function.SIGMOID.c0Sign, Function.SIGMOID.c1Sign, Function.SIGMOID.c2Sign))
+  val tanhLUT      = VecInit(loadLUT(s"$lutPath/tanh-coeffs.txt",       Function.TANH.c0Sign, Function.TANH.c1Sign, Function.TANH.c2Sign))
 
   val op    = io.in.bits.op
   val index = io.in.bits.index
@@ -476,7 +492,8 @@ class LookupTable extends Module {
     SFUOp.RSQRT -> Mux(index(6), rsqrtOddLUT(index(5, 0)), rsqrtEvenLUT(index(5, 0))),
     SFUOp.SIN   -> sinLUT(index(5, 0)),
     SFUOp.COS   -> sinLUT(index(5, 0)),
-    SFUOp.SIGMOID -> sigmoidLUT(index),
+    SFUOp.SIGMOID -> tanhLUT(index),
+    SFUOp.TANH -> tanhLUT(index),
     SFUOp.EXP -> exp2LUT(index(5, 0))
   ))
  
@@ -600,18 +617,20 @@ class Compose extends Module {
   val exp        = io.in.bits.exp
   val polyResult = io.in.bits.polyResult
 
-  // LUT result is h = sigmoid(-|x|) in Q0.26. Use sigmoid(x)=1-h for
-  // non-negative inputs before sharing the leading-zero normalizer.
-  val sigmoidFixed = Mux(sign.asBool, polyResult, "h4000000".U(27.W) - polyResult)
+  val halfTanh = polyResult >> 1
+  val sigmoidFixed = Mux(sign.asBool,
+    "h2000000".U(27.W) - halfTanh, "h2000000".U(27.W) + halfTanh)
 
-  // log2, sin, cos, and sigmoid special compose
+  // log2, sin, cos, TANH, and SIGMOID share the leading-zero normalizer.
+  val isTanhFamily = io.in.bits.op === SFUOp.SIGMOID || io.in.bits.op === SFUOp.TANH
+  val activationFixed = Mux(io.in.bits.op === SFUOp.SIGMOID, sigmoidFixed, polyResult)
   val sum = Mux(
-    io.in.bits.op === SFUOp.SIGMOID,
-    Cat(0.U(7.W), sigmoidFixed),
+    isTanhFamily,
+    Cat(0.U(7.W), activationFixed),
     Cat(exp.asUInt, polyResult(25, 0))
   )
   val sumAbs = Mux(
-    io.in.bits.op === SFUOp.SIGMOID,
+    isTanhFamily,
     sum,
     Mux(exp(7), (~sum + 1.U(34.W)), sum)
   )
@@ -645,6 +664,7 @@ class Compose extends Module {
     SFUOp.SIN   -> Mux(polyResult(26), Cat(sign, 127.U(8.W) , 0.U(23.W)), Cat(sign, expSin, mantSin)),
     SFUOp.COS   -> Mux(polyResult(26), Cat(sign, 127.U(8.W) , 0.U(23.W)), Cat(sign, expSin, mantSin)),
     SFUOp.SIGMOID -> Cat(0.U(1.W), expSin, mantSin),
+    SFUOp.TANH -> Cat(sign, expSin, mantSin),
     SFUOp.EXP -> Cat(0.U(1.W), expExp2, mantExp2)
   ))
 

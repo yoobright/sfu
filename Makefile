@@ -10,6 +10,8 @@ SIGMOID_TEST = $(BUILD_DIR)/sigmoid_test
 SIGMOID_ACCURACY = $(BUILD_DIR)/sigmoid_accuracy
 EXP_TEST = $(BUILD_DIR)/exp_test
 EXP_ACCURACY = $(BUILD_DIR)/exp_accuracy
+TANH_TEST = $(BUILD_DIR)/tanh_test
+TANH_ACCURACY = $(BUILD_DIR)/tanh_accuracy
 
 VERILATOR_SRCS = $(VERILATOR_ROOT)/include/verilated.cpp $(VERILATOR_ROOT)/include/verilated_threads.cpp
 
@@ -40,9 +42,10 @@ endif
 
 all: run
 
-test-cmodel: $(SIGMOID_TEST) $(EXP_TEST)
+test-cmodel: $(SIGMOID_TEST) $(EXP_TEST) $(TANH_TEST)
 	@LUT_PATH=./lut ./$(SIGMOID_TEST)
 	@LUT_PATH=./lut ./$(EXP_TEST)
+	@LUT_PATH=./lut ./$(TANH_TEST)
 
 accuracy-sigmoid: $(SIGMOID_ACCURACY)
 	@LUT_PATH=./lut ./$(SIGMOID_ACCURACY)
@@ -50,9 +53,11 @@ accuracy-sigmoid: $(SIGMOID_ACCURACY)
 accuracy-exp: $(EXP_ACCURACY)
 	@LUT_PATH=./lut ./$(EXP_ACCURACY)
 
-generate-sigmoid-luts:
-	python3 tools/gen_sigmoid_lut.py --segments 64
-	python3 tools/gen_sigmoid_lut.py --segments 128
+accuracy-tanh: $(TANH_ACCURACY)
+	@LUT_PATH=./lut ./$(TANH_ACCURACY)
+
+generate-tanh-lut:
+	python3 tools/gen_tanh_lut.py
 
 run: $(TARGET)
 	@LUT_PATH=./lut ./$(TARGET)
@@ -90,6 +95,12 @@ $(EXP_TEST): tests/exp_test.cpp cmodel/build/libcmodel.a | $(BUILD_DIR)
 $(EXP_ACCURACY): tests/exp_accuracy.cpp cmodel/build/libcmodel.a | $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS) -I./cmodel/include -o $@ $< cmodel/build/libcmodel.a
 
+$(TANH_TEST): tests/tanh_test.cpp cmodel/build/libcmodel.a | $(BUILD_DIR)
+	$(CXX) $(CXXFLAGS) -I./cmodel/include -o $@ $< cmodel/build/libcmodel.a
+
+$(TANH_ACCURACY): tests/tanh_accuracy.cpp cmodel/build/libcmodel.a | $(BUILD_DIR)
+	$(CXX) $(CXXFLAGS) -I./cmodel/include -o $@ $< cmodel/build/libcmodel.a
+
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
 
@@ -97,4 +108,4 @@ clean:
 	rm -rf $(BUILD_DIR)
 	for dir in $(SUBDIRS); do $(MAKE) -C $$dir clean; done
 
-.PHONY: all clean test-cmodel accuracy-sigmoid accuracy-exp generate-sigmoid-luts $(SUBDIRS)
+.PHONY: all clean test-cmodel accuracy-sigmoid accuracy-exp accuracy-tanh generate-tanh-lut $(SUBDIRS)

@@ -145,7 +145,7 @@ inline std::vector<FunctionConfig> get_all_function_configs() {
         {SFUOp::RSQRT, "rsqrt-even", "rsqrt-even-coeffs.txt", "rsqrt-even_1.0_2.0.bin", 64, 6, 1.0f, 2.0f, true, false},
         {SFUOp::RSQRT, "rsqrt-odd", "rsqrt-odd-coeffs.txt", "rsqrt-odd_2.0_4.0.bin", 64, 6, 2.0f, 4.0f, false, true},
         {SFUOp::SIN, "sin", "sin-coeffs.txt", "sin_1.0_2.0.bin", 64, 6, 1.0f, 2.0f, false, false},
-        {SFUOp::SIGMOID, "sigmoid", "sigmoid-coeffs.txt", "sigmoid_0.0_6.0.bin", 128, 7, 0.0f, 6.0f, false, false}
+        {SFUOp::TANH, "tanh", "tanh-coeffs.txt", "tanh_0.0_8.0.bin", 128, 7, 0.0f, 8.0f, false, false}
     };
 }
 
@@ -208,6 +208,7 @@ inline CoeffOptimizationConfig get_default_optimization_config(SFUOp op) {
         case SFUOp::SIN:
         case SFUOp::COS:
         case SFUOp::SIGMOID:
+        case SFUOp::TANH:
             config.primary_metric = OptimizationMetric::HYBRID_ABS_MAX_AVG;
             config.secondary_metric = OptimizationMetric::MAX_ABS_ERROR;
             break;

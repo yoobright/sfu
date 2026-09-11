@@ -18,12 +18,11 @@ float CPU::compute(float input, SFUOp op) {
   case SFUOp::COS:
     return cosf(input);
   case SFUOp::SIGMOID:
-    if (input >= 0.0f)
-      return 1.0f / (1.0f + expf(-input));
-    {
-      float exp_x = expf(input);
-      return exp_x / (1.0f + exp_x);
-    }
+    if (input <= -8.0f)
+      return 0.0f;
+    if (input >= 8.0f)
+      return 1.0f;
+    return 0.5f * (tanhf(0.5f * input) + 1.0f);
   case SFUOp::EXP:
     if (std::isnan(input))
       return input;
@@ -32,6 +31,12 @@ float CPU::compute(float input, SFUOp op) {
     if (input > 0.0f)
       return 1.0f;
     return expf(input);
+  case SFUOp::TANH:
+    if (input <= -8.0f)
+      return -1.0f;
+    if (input >= 8.0f)
+      return 1.0f;
+    return tanhf(input);
   default:
     return 0.0f;
   }

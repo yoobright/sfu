@@ -4,7 +4,7 @@ A high-performance hardware implementation of special mathematical functions for
 
 ## Overview
 
-This project implements a unified **Special Function Unit (SFU)** that supports nine FP32 functions using a shared pipelined architecture based on fixed-point quadratic interpolation with lookup tables (LUT):
+This project implements a unified **Special Function Unit (SFU)** that supports ten FP32 functions using a shared pipelined architecture based on fixed-point quadratic interpolation with lookup tables (LUT):
 
 - **EXP2**: Base-2 exponential $2^x$
 - **LOG2**: Base-2 logarithm $\log_2(x)$
@@ -15,6 +15,7 @@ This project implements a unified **Special Function Unit (SFU)** that supports 
 - **COS**: $\cos\!\left(\frac{\pi}{2} x\right)$
 - **SIGMOID**: $\sigma(x)=1/(1+e^{-x})$
 - **EXP**: Clipped negative-domain exponential $e^x$, effective over $[-16,0]$
+- **TANH**: Hyperbolic tangent $\tanh(x)$, effective over $[-8,8]$
 
 The architecture is based on the multifunction interpolation approach described by Oberman and Siu \[1\], which is consistent with the design used in NVIDIA SFUs.
 
@@ -53,30 +54,16 @@ a replacement for a full-range IEEE-754 `expf`.
 
 For **SIN/COS**, the functions computed are $\sin(\frac{\pi}{2} x)$ and $\cos(\frac{\pi}{2} x)$. The period is 4, so `quadrant = floor(x) mod 4` is read from the two low bits of the integer part of $x$. The LUT stores coefficients for $\sin(\frac{\pi}{2} t)$ over $t \in [0, 1)$ with 64 sub-intervals. The fractional part $f \in [0, 1)$ is used for interpolation, and the quadrant determines whether to use $t = f$ or $t = 1 - f$ and the sign of the result.
 
-For **SIGMOID**, symmetry reduces the approximation to
-$h(x)=\sigma(-|x|)$ on the positive magnitude axis. The LUT approximates
-$h$ in unsigned Q0.26 using a positive $C_0$, negative $C_1$, and positive
-$C_2$; the compose stage returns $h$ for negative inputs and $1-h$ for
-non-negative inputs. Inputs with $|x|\ge6$ intentionally saturate to 0 or 1.
+For **TANH/SIGMOID**, one 128-entry LUT approximates $\tanh(|x|)$ in unsigned
+Q0.26. TANH applies odd symmetry. SIGMOID reuses the same range reducer,
+polynomial, and LUT by addressing it with $|x|/2$, then composing
+$\sigma(x)=(1+\tanh(x/2))/2$. Both operations saturate at $|x|\ge8$.
 
-Like SIN's quadrant/range mapping, the default 128-entry SIGMOID uses simple
-comparisons and bit slices rather than a divider. The 64-entry area experiment
-uses shift-add scaling to move four entries from $[4,6)$ into the higher-error
-$[2,4)$ region. Every LUT entry is reachable:
-
-| Configuration | $[0,2)$ | $[2,4)$ | $[4,6)$ | Worst exhaustive fixed-point error |
-|---------------|-----------|-----------|-----------|------------------------------------|
-| 64 entries | 32 × $1/16$ | 20 × $1/10$ | 12 × $1/6$ | `4.337e-7` |
-| 128 entries (RTL default) | 64 × $1/32$ | 32 × $1/16$ | 32 × $1/16$ | `1.445e-7` |
-
-The coefficients are formed with a degree-2 minimax solve, finite-word
-quantization, compensation search, and exhaustive evaluation of all 65,536
-local fixed-point arguments in every interval, following the enhanced-minimax
-procedure in \[1\]. The wider intervals in the 64-entry experiment use a
-$2^{-22}$ $C_2$ scale; the default 128-entry table uses $2^{-24}$.
-Run `python3 tools/gen_sigmoid_lut.py --segments 64` and
-`python3 tools/gen_sigmoid_lut.py --segments 128` to reproduce both tables
-(NumPy and SciPy are required).
+The table uses power-of-two interval widths: 64 × $1/64$ over $[0,1)$,
+48 × $1/16$ over $[1,4)$, and 16 × $1/4$ over $[4,8)$. Coefficients come
+from a degree-2 minimax solve followed by finite-word compensation and an
+exhaustive check of all 65,536 local fixed-point arguments per interval. Run
+`python3 tools/gen_tanh_lut.py` to reproduce it (NumPy and SciPy required).
 
 The final result is assembled by combining the polynomial output with the input exponent according to each function's composition rule.
 
@@ -89,7 +76,7 @@ S0: Filter (1 cycle)
     - Handle special values: NaN, ±Inf, ±0, subnormals (treated as zero)
     - Handle out-of-range inputs for EXP2 (overflow/underflow)
     - Clip EXP below -16 to 0 and above 0 to 1
-    - Saturate SIGMOID to 0 or 1 when |x| >= 6
+    - Saturate TANH/SIGMOID when |x| >= 8
     - Handle negative inputs for LOG2, SQRT, RSQRT
     - Output bypass flag and bypass value for special cases
     - Pass normal inputs to next stage
@@ -98,7 +85,7 @@ S1: RangeReduce (1 cycle)
     - EXP2/SIN/COS: Compute integer and fractional decomposition
     - EXP: multiply the magnitude by Q1.31 log2(e), then use the EXP2 decomposition
     - SIN/COS: quadrant = floor(x) mod 4; map fractional part f to t = f or 1-f based on quadrant[0]; sign from quadrant[1]
-    - SIGMOID: split |x| at 2; select one of 128 intervals with bit slices and form a 16-bit local argument
+    - TANH/SIGMOID: reduce |x| or |x|/2 into the shared 128-entry TANH table
     - LOG2/RCP/SQRT/RSQRT: Extract exponent and split mantissa into index + xl
     - SQRT/RSQRT: index[6] = E mod 2 (selects even/odd LUT)
     - Output: index (7 bits), xl (17 bits), exp (8 bits signed), sign (1 bit)
@@ -106,7 +93,7 @@ S1: RangeReduce (1 cycle)
 S2: LUT (1 cycle)
     - Index: 7 bits → 128 entries per function
     - EXP2/EXP/LOG2/SIN/COS: 64-entry tables (index[5:0]); EXP shares EXP2
-    - RCP/SIGMOID: 128-entry tables (full 7-bit index)
+    - RCP/TANH: 128-entry tables (full 7-bit index); SIGMOID shares TANH
     - SQRT/RSQRT: two 64-entry tables (even/odd), selected by index[6]
     - Each entry stores (c0, c1, c2) as signed fixed-point integers
 
@@ -132,13 +119,14 @@ S6: Compose (1 cycle)
       · SQRT:  exp_out = 127 + exp,  mant = polyResult[24:2]
       · RSQRT: exp_out = 126 - exp,  mant = polyResult[24:2]
       · SIN/COS: leading-zero normalization; clamp to ±1 if polyResult overflows
-      · SIGMOID: select h or 1-h from input sign; leading-zero normalize Q0.26
+      · TANH: apply input sign and normalize the Q0.26 magnitude
+      · SIGMOID: form $(1\pm\mathrm{TANH})/2$ and normalize Q0.26
     - If bypass flag set, output bypassVal; otherwise output assembled result
 ```
 
 ### Key Features
 
-- **Unified Architecture**: Single 7-stage pipeline serves all nine functions
+- **Unified Architecture**: Single 7-stage pipeline serves all ten functions
 - **Full Throughput**: One result per cycle after initial latency
 - **128-Entry LUTs**: Per-function coefficient tables (some split into even/odd for SQRT/RSQRT)
 - **Fixed-Point Polynomial**: Quadratic approximation in integer arithmetic — no FP multipliers in datapath
@@ -246,39 +234,19 @@ Coefficients are optimized offline using the `optimizer` tool to minimize the wo
 
 ### SIGMOID
 
-The experiment measures both the 64- and 128-entry configurations over the
-complete non-saturated positive domain. For $[0,0.25)$, it evaluates every
-hardware-distinct reduced argument: 262,144 for 64 entries and 524,288 for
-128 entries. This avoids redundantly enumerating FP32 encodings that collapse
-onto the same fixed-point argument. Every FP32 encoding is evaluated in each
-remaining half-open interval. The C model is compared with the FP32 rounding
-of a double-precision sigmoid reference.
+The shared-TANH implementation has a sampled worst-case absolute error of
+$5.960\times10^{-7}$ over the non-saturated positive domain. Its regression
+also verifies that `SIGMOID(x)` and `TANH(x/2)` produce identical LUT indices
+and local interpolation arguments. Run `make accuracy-sigmoid` to reproduce
+the interval results.
 
-| Interval | Implementation | MaxAbsErr | MaxULP | AvgAbsErr | AvgULP |
-|----------|---------------|-----------|--------|-----------|--------|
-| **[0, 0.25)** | 64 entries | 3.576e-07 | 6 | 1.370e-07 | 2.30 |
-| | 128 entries | 1.788e-07 | **3** | 4.803e-08 | 0.81 |
-| **[0.25, 0.5)** | 64 entries | 4.768e-07 | 8 | 1.682e-07 | 2.82 |
-| | 128 entries | 2.980e-07 | **5** | 9.458e-08 | 1.59 |
-| **[0.5, 1)** | 64 entries | 4.172e-07 | 7 | 1.222e-07 | 2.05 |
-| | 128 entries | 2.384e-07 | **4** | 6.989e-08 | 1.17 |
-| **[1, 2)** | 64 entries | 2.980e-07 | 5 | 9.369e-08 | 1.57 |
-| | 128 entries | 1.788e-07 | **3** | 4.527e-08 | 0.76 |
-| **[2, 4)** | 64 entries | 4.768e-07 | 8 | 1.226e-07 | 2.06 |
-| | 128 entries | 2.384e-07 | **4** | 5.318e-08 | 0.89 |
-| **[4, 6)** | 64 entries | 4.768e-07 | 8 | 1.109e-07 | 1.86 |
-| | 128 entries | 1.788e-07 | **3** | 2.804e-08 | 0.47 |
+### TANH
 
-The 128-entry configuration has a worst case of 5 ULP across all measured
-intervals. Reallocating four of the 64-entry tail segments reduces its worst
-case from 12 to 8 ULP; it is retained as the area/accuracy comparison point.
-The RTL and optimizer use 128 entries by default.
-
-Negative inputs are covered by the symmetry regression
-$\sigma(-x)=1-\sigma(x)$. At $|x|\ge6$, the output intentionally saturates to
-0 or 1 and is therefore outside the interpolation-accuracy experiment. Run
-`make accuracy-sigmoid` to reproduce the table and `make test-cmodel` for the
-reduced-domain, symmetry, boundary, and special-value regression.
+The coefficient generator's exhaustive fixed-point check reports a worst-case
+absolute error of $9.274\times10^{-7}$ on $[0,8)$. The FP32 C-model interval
+test reports at most $1.143\times10^{-6}$ after input reduction and output
+normalization. ULP is not a useful bound near zero, so TANH is specified by
+absolute error. Run `make accuracy-tanh` to reproduce the results.
 
 ### EXP
 

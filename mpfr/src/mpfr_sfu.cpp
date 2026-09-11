@@ -35,10 +35,18 @@ float MPFR::compute_float(float input, SFUOp op) {
     mpfr_cos(result, x, MPFR_RNDN);
     break;
   case SFUOp::SIGMOID:
-    mpfr_neg(result, x, MPFR_RNDN);
-    mpfr_exp(result, result, MPFR_RNDN);
+    if (input <= -8.0f) {
+      mpfr_set_zero(result, 1);
+      break;
+    }
+    if (input >= 8.0f) {
+      mpfr_set_ui(result, 1, MPFR_RNDN);
+      break;
+    }
+    mpfr_div_2ui(result, x, 1, MPFR_RNDN);
+    mpfr_tanh(result, result, MPFR_RNDN);
     mpfr_add_ui(result, result, 1, MPFR_RNDN);
-    mpfr_ui_div(result, 1, result, MPFR_RNDN);
+    mpfr_div_2ui(result, result, 1, MPFR_RNDN);
     break;
   case SFUOp::EXP:
     if (input < -16.0f)
@@ -47,6 +55,14 @@ float MPFR::compute_float(float input, SFUOp op) {
       mpfr_set_ui(result, 1, MPFR_RNDN);
     else
       mpfr_exp(result, x, MPFR_RNDN);
+    break;
+  case SFUOp::TANH:
+    if (input <= -8.0f)
+      mpfr_set_si(result, -1, MPFR_RNDN);
+    else if (input >= 8.0f)
+      mpfr_set_ui(result, 1, MPFR_RNDN);
+    else
+      mpfr_tanh(result, x, MPFR_RNDN);
     break;
   }
 
@@ -89,10 +105,18 @@ double MPFR::compute_double(double input, SFUOp op) {
     mpfr_cos(result, x, MPFR_RNDN);
     break;
   case SFUOp::SIGMOID:
-    mpfr_neg(result, x, MPFR_RNDN);
-    mpfr_exp(result, result, MPFR_RNDN);
+    if (input <= -8.0) {
+      mpfr_set_zero(result, 1);
+      break;
+    }
+    if (input >= 8.0) {
+      mpfr_set_ui(result, 1, MPFR_RNDN);
+      break;
+    }
+    mpfr_div_2ui(result, x, 1, MPFR_RNDN);
+    mpfr_tanh(result, result, MPFR_RNDN);
     mpfr_add_ui(result, result, 1, MPFR_RNDN);
-    mpfr_ui_div(result, 1, result, MPFR_RNDN);
+    mpfr_div_2ui(result, result, 1, MPFR_RNDN);
     break;
   case SFUOp::EXP:
     if (input < -16.0)
@@ -101,6 +125,14 @@ double MPFR::compute_double(double input, SFUOp op) {
       mpfr_set_ui(result, 1, MPFR_RNDN);
     else
       mpfr_exp(result, x, MPFR_RNDN);
+    break;
+  case SFUOp::TANH:
+    if (input <= -8.0)
+      mpfr_set_si(result, -1, MPFR_RNDN);
+    else if (input >= 8.0)
+      mpfr_set_ui(result, 1, MPFR_RNDN);
+    else
+      mpfr_tanh(result, x, MPFR_RNDN);
     break;
   }
 

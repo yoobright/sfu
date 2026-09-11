@@ -13,7 +13,8 @@ enum class SFUOp {
   SIN = 5,
   COS = 6,
   SIGMOID = 7,
-  EXP = 8
+  EXP = 8,
+  TANH = 9
 };
 
 struct SFUConfig {
@@ -55,6 +56,7 @@ public:
   static const FunctionParams SIN;
   static const FunctionParams SIGMOID;
   static const FunctionParams EXP;
+  static const FunctionParams TANH;
 
   static const FunctionParams &get(SFUOp op);
 };

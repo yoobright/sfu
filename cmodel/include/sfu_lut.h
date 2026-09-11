@@ -12,7 +12,7 @@ struct LUTEntry {
 
 class SFULUT {
 public:
-  static void init(uint32_t sigmoid_lut_entries = 128);
+  static void init();
   static LUTOutput lookup(const RangeReduceOutput &input, SFUOp op);
 
 private:
@@ -26,7 +26,7 @@ private:
   static std::vector<LUTEntry> rsqrt_even_lut;
   static std::vector<LUTEntry> rsqrt_odd_lut;
   static std::vector<LUTEntry> sin_lut;
-  static std::vector<LUTEntry> sigmoid_lut;
+  static std::vector<LUTEntry> tanh_lut;
 };
 
 #endif

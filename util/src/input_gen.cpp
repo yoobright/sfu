@@ -16,8 +16,8 @@ std::vector<float> InputGen::generate(SFUOp op, size_t count) {
     return inputs;
   }
 
-  if (op == SFUOp::SIGMOID) {
-    constexpr size_t kDefaultCount = 6U << 20;
+  if (op == SFUOp::SIGMOID || op == SFUOp::TANH) {
+    constexpr size_t kDefaultCount = 8U << 20;
     if (count == 0 || count > kDefaultCount)
       count = kDefaultCount;
 
@@ -25,7 +25,7 @@ std::vector<float> InputGen::generate(SFUOp op, size_t count) {
     inputs.reserve(count);
     for (size_t i = 0; i < count; ++i) {
       double t = count == 1 ? 0.0 : static_cast<double>(i) / (count - 1);
-      inputs.push_back(static_cast<float>(-6.0 + 12.0 * t));
+      inputs.push_back(static_cast<float>(-8.0 + 16.0 * t));
     }
     return inputs;
   }
