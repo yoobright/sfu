@@ -263,19 +263,22 @@ absolute error of $9.274\times10^{-7}$ on $[0,8)$. The FP32 C-model interval
 test reports the following results after input reduction and output
 normalization. Each interval contains 1,048,576 uniformly spaced samples.
 
-| Interval | MaxAbsErr |
-|----------|-----------|
-| **[0, 1)** | 2.310302e-07 |
-| **[1, 2)** | **1.142705e-06** |
-| **[2, 4)** | 3.611519e-07 |
-| **[4, 6)** | 4.105278e-07 |
-| **[6, 8)** | 2.226594e-07 |
+| Interval | MaxAbsErr | MaxULP |
+|----------|-----------|--------|
+| **[0, 1)** | 2.384186e-07 | **2048** |
+| **[1, 2)** | **1.132488e-06** | 19 |
+| **[2, 4)** | 3.576279e-07 | 6 |
+| **[4, 6)** | 4.172325e-07 | 7 |
+| **[6, 8)** | 2.384186e-07 | 4 |
 
 The full-domain `[-8,8]` regression samples 4,194,305 points and reports a
 maximum absolute error of 9.70154e-07 and a maximum quantization-induced
-monotonic reversal of 3.57628e-07. ULP is not a useful bound near zero, so
-TANH is specified by absolute error. `±0`, `±Inf`, NaN, and the `±8`
-saturation boundaries are also checked.
+monotonic reversal of 3.57628e-07. The 2048-ULP result occurs near
+$x=8.72612\times10^{-5}$: one Q0.26 output step ($1.490116\times10^{-8}$)
+already spans 2048 FP32 ULPs at that magnitude. Thus ULP is reported for
+completeness but is not a useful TANH error bound near zero; absolute error is
+the primary metric. `±0`, `±Inf`, NaN, and the `±8` saturation boundaries are
+also checked.
 
 Run `make accuracy-tanh` for the interval table and `make test-cmodel` for the
 full-domain and special-value regression.
