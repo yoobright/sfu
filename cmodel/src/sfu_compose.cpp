@@ -31,15 +31,38 @@ static uint32_t q26_to_float(uint32_t fixed, uint8_t sign = 0) {
 uint32_t SFUCompose::compose(const PolyOutput &input, SFUOp op) {
   uint32_t result = 0;
   uint32_t poly_result = input.result;
-  int8_t exp = input.exp;
+  int16_t exp = input.exp;
   uint8_t sign = input.sign;
 
   switch (op) {
-  case SFUOp::EXP2:
-  case SFUOp::EXP: {
+  case SFUOp::EXP2: {
     uint8_t exp_out = (127 + exp) & 0xFF;
     uint32_t mant_out = (poly_result >> 2) & 0x7FFFFF;
     result = (exp_out << 23) | mant_out;
+    break;
+  }
+
+  case SFUOp::EXP: {
+    // The EXP2 polynomial is Q2.25. Preserve its carry into 2.0.
+    if (poly_result >= (1U << 26)) {
+      poly_result >>= 1;
+      ++exp;
+    }
+    if (exp > 127) {
+      result = 0x7F800000;
+    } else if (exp >= -126) {
+      result = (static_cast<uint32_t>(127 + exp) << 23) |
+               ((poly_result >> 2) & 0x7FFFFF);
+    } else if (exp >= -150) {
+      // Subnormals use units of 2^-149. Round once, ties to even;
+      // rounding may naturally carry into the smallest normal number.
+      unsigned shift = -exp - 124;
+      uint32_t base = poly_result >> shift;
+      uint32_t remainder = poly_result & ((1U << shift) - 1);
+      uint32_t half = 1U << (shift - 1);
+      result = base + (remainder > half ||
+                      (remainder == half && (base & 1)));
+    }
     break;
   }
 

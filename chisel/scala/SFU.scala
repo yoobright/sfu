@@ -160,7 +160,7 @@ class RangeReduceToLookup extends Bundle {
   val index     = UInt(7.W)
   val xl        = UInt(17.W)
   val sign      = UInt(1.W)
-  val exp       = SInt(8.W)
+  val exp       = SInt(9.W)
   val op        = UInt(4.W)
   val bypass    = Bool()
   val bypassVal = UInt(32.W)
@@ -172,7 +172,7 @@ class LookupToPoly extends Bundle {
   val c2        = SInt(13.W)
   val xl        = UInt(17.W)
   val sign      = UInt(1.W)
-  val exp       = SInt(8.W)
+  val exp       = SInt(9.W)
   val op        = UInt(4.W)
   val bypass    = Bool()
   val bypassVal = UInt(32.W)
@@ -181,7 +181,7 @@ class LookupToPoly extends Bundle {
 class PolyToCompose extends Bundle {
   val polyResult = UInt(27.W)
   val sign       = UInt(1.W)
-  val exp        = SInt(8.W)
+  val exp        = SInt(9.W)
   val op         = UInt(4.W)
   val bypass     = Bool()
   val bypassVal  = UInt(32.W)
@@ -287,15 +287,16 @@ class Filter extends Module {
       saturate -> Mux(isNeg, SFUParameters.NEG_ONE, SFUParameters.POS_ONE)
     ))
   }.elsewhen(io.in.bits.op === SFUOp.EXP) {
-    val belowRange = isNeg && io.in.bits.x(30, 0) > "h41800000".U(31.W)
-    val positive = !isNeg && !isZero
-    bypass := isZero || isInf || isNaN || belowRange || positive
+    val tiny = e === 0.U
+    val overflow = !isNeg && io.in.bits.x(30, 0) >= "h42B17218".U(31.W)
+    val underflow = isNeg && io.in.bits.x(30, 0) >= "h42CFF1B5".U(31.W)
+    bypass := tiny || isInf || isNaN || overflow || underflow
     bypassVal := MuxCase(SFUParameters.POS_ZERO, Seq(
-      isZero     -> SFUParameters.POS_ONE,
-      isInf      -> Mux(isNeg, SFUParameters.POS_ZERO, SFUParameters.POS_ONE),
-      isNaN      -> SFUParameters.NAN,
-      belowRange -> SFUParameters.POS_ZERO,
-      positive   -> SFUParameters.POS_ONE
+      isNaN     -> SFUParameters.NAN,
+      isInf     -> Mux(isNeg, SFUParameters.POS_ZERO, SFUParameters.POS_INF),
+      tiny      -> SFUParameters.POS_ONE,
+      overflow  -> SFUParameters.POS_INF,
+      underflow -> SFUParameters.POS_ZERO
     ))
   }.otherwise {
     bypass    := false.B
@@ -341,16 +342,20 @@ class RangeReduce extends Module {
   val intPartFloor  = Mux(sign && (!isFracZero), intPart + 1.U    , intPart)
   val fracPartFloor = Mux(sign && (!isFracZero), fracPartInv + 1.U, fracPart)
 
-  // e^x = 2^(x * log2(e)).  Multiply the Q?.23 magnitude by log2(e) in
-  // Q1.31, round back to Q?.23, then reuse the EXP2 LUT and compose path.
-  val log2EQ31          = 3098164009L.U(32.W)
-  val expScaledProduct = sigShifted(30, 0) * log2EQ31
-  val expScaled        = (expScaledProduct + (1L << 30).U)(62, 31)
-  val expIntPart       = expScaled(30, 23)
-  val expFracPart      = expScaled(22, 0)
-  val expFracZero      = expFracPart === 0.U
-  val expIntPartFloor  = Mux(expFracZero, expIntPart, expIntPart + 1.U)
-  val expFracPartFloor = Mux(expFracZero, 0.U(23.W), ~expFracPart + 1.U)
+  // Multiply the full significand by Q1.31 log2(e) before rounding to
+  // Q?.23. Live EXP inputs have expSigned <= 6; clamp bypassed inputs.
+  val log2EQ31 = 3098164009L.U(32.W)
+  val expProduct = sig * log2EQ31
+  val expShiftRaw = 31.S(10.W) - expSigned
+  val expShift = Mux(expShiftRaw < 1.S, 1.U,
+    Mux(expShiftRaw > 63.S, 63.U, expShiftRaw.asUInt))(5, 0)
+  val expRound = (1.U(64.W) << (expShift - 1.U))(63, 0)
+  val expScaled = (expProduct.pad(64) + expRound) >> expShift
+  val expIntPart = expScaled(30, 23)
+  val expFracPart = expScaled(22, 0)
+  val expNegFraction = sign && (expFracPart =/= 0.U)
+  val expIntPartFloor = expIntPart + expNegFraction.asUInt
+  val expFracPartFloor = Mux(expNegFraction, ~expFracPart + 1.U, expFracPart)
 
   // sin/cos specific quadrant calculation
   val quadrant = intPart(1, 0)
@@ -389,7 +394,7 @@ class RangeReduce extends Module {
     SFUOp.SIN   -> 0.S(8.W),
     SFUOp.COS   -> 0.S(8.W),
     SFUOp.SIGMOID -> 0.S(8.W),
-    SFUOp.EXP -> -(expIntPartFloor.asSInt),
+    SFUOp.EXP -> Mux(sign, -expIntPartFloor.zext, expIntPartFloor.zext),
     SFUOp.TANH -> 0.S(8.W)
   ))
 
@@ -534,7 +539,7 @@ class Poly extends Module {
     val c2        = SInt(13.W)
     val xl        = UInt(17.W)
     val xl2       = UInt(15.W)
-    val exp       = SInt(8.W)
+    val exp       = SInt(9.W)
     val sign      = UInt(1.W)
     val bypass    = Bool()
     val bypassVal = UInt(32.W)
@@ -566,7 +571,7 @@ class Poly extends Module {
     val c0        = SInt(27.W)
     val c1Xl      = SInt(35.W)
     val c2Xl2     = SInt(29.W)
-    val exp       = SInt(8.W)
+    val exp       = SInt(9.W)
     val sign      = UInt(1.W)
     val bypass    = Bool()
     val bypassVal = UInt(32.W)
@@ -628,7 +633,7 @@ class Compose extends Module {
   val sum = Mux(
     isTanhFamily,
     Cat(0.U(7.W), activationFixed),
-    Cat(exp.asUInt, polyResult(25, 0))
+    Cat(exp.asUInt(7, 0), polyResult(25, 0))
   )
   val sumAbs = Mux(
     isTanhFamily,
@@ -656,6 +661,24 @@ class Compose extends Module {
   val expRsqrt  = (126.S - exp).asUInt(7, 0)
   val mantRsqrt = polyResult(24, 2)
 
+  // EXP uses the same Q2.25 polynomial as EXP2, with gradual underflow.
+  val expCarry = polyResult >= (1L << 26).U
+  val expPoly = Mux(expCarry, polyResult >> 1, polyResult)
+  val expInteger = exp +& expCarry.asUInt.zext
+  val expNormal = Cat(0.U(1.W), (127.S + expInteger).asUInt(7, 0), expPoly(24, 2))
+  val subShiftRaw = -expInteger - 124.S
+  val subShift = Mux(subShiftRaw < 1.S, 1.U,
+    Mux(subShiftRaw > 26.S, 26.U, subShiftRaw.asUInt))(4, 0)
+  val subBase = expPoly >> subShift
+  val subHalf = (1.U(27.W) << (subShift - 1.U))(26, 0)
+  val subMask = ((1.U(28.W) << subShift) - 1.U)(26, 0)
+  val subRem = expPoly & subMask
+  val subRounded = subBase + (subRem > subHalf ||
+    (subRem === subHalf && subBase(0))).asUInt
+  val expResult = Mux(expInteger > 127.S, SFUParameters.POS_INF,
+    Mux(expInteger >= (-126).S, expNormal,
+      Mux(expInteger >= (-150).S, subRounded.pad(32), 0.U(32.W))))
+
   val result = MuxLookup(io.in.bits.op, 0.U(32.W)) (Seq(
     SFUOp.EXP2  -> Cat(0.U(1.W), expExp2, mantExp2),
     SFUOp.LOG2  -> Cat(signLog2.asUInt, expLog2, mantLog2),
@@ -666,7 +689,7 @@ class Compose extends Module {
     SFUOp.COS   -> Mux(polyResult(26), Cat(sign, 127.U(8.W) , 0.U(23.W)), Cat(sign, expSin, mantSin)),
     SFUOp.SIGMOID -> Cat(0.U(1.W), expSin, mantSin),
     SFUOp.TANH -> Cat(sign, expSin, mantSin),
-    SFUOp.EXP -> Cat(0.U(1.W), expExp2, mantExp2)
+    SFUOp.EXP -> expResult
   ))
 
   val s1     = Wire(Decoupled(new SFUOutput))

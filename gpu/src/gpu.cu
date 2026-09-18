@@ -44,7 +44,7 @@ __global__ void sfu_kernel(const float *inputs, float *outputs, int n, int op) {
                         : 0.5f * (tanhf(0.5f * input) + 1.0f));
     break;
   case 8:
-    result = input < -16.0f ? 0.0f : (input > 0.0f ? 1.0f : expf(input));
+    result = expf(input);
     break;
   case 9:
     result = input <= -8.0f ? -1.0f

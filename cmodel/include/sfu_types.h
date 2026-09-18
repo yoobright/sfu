@@ -73,7 +73,7 @@ struct RangeReduceOutput {
   uint8_t index;
   uint32_t xl;
   uint8_t sign;
-  int8_t exp;
+  int16_t exp; // EXP needs a signed 9-bit exponent (-150..127).
 };
 
 struct LUTOutput {
@@ -82,13 +82,13 @@ struct LUTOutput {
   int32_t c2;
   uint32_t xl;
   uint8_t sign;
-  int8_t exp;
+  int16_t exp; // EXP needs a signed 9-bit exponent (-150..127).
 };
 
 struct PolyOutput {
   uint32_t result;
   uint8_t sign;
-  int8_t exp;
+  int16_t exp; // EXP needs a signed 9-bit exponent (-150..127).
 };
 
 #endif

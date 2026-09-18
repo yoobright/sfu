@@ -125,15 +125,19 @@ FilterOutput SFUFilter::filter(uint32_t input_bits, SFUOp op) {
     }
     break;
   case SFUOp::EXP:
-    // This operation is the clipped negative-domain exponential used by
-    // softmax-like kernels: exp(x) on [-16, 0], 0 below, and 1 above.
+    // Only FP32 representability limits apply (round-to-nearest).
+    // First positive overflow input: 0x42B17218; first negative input
+    // rounding to zero: 0xC2CFF1B5. NaNs were handled above.
     if (is_inf) {
       out.bypass = true;
-      out.bypass_val = sign ? 0x00000000 : 0x3F800000;
-    } else if (is_zero || exp == 0 || !sign) {
+      out.bypass_val = sign ? 0x00000000 : 0x7F800000;
+    } else if (exp == 0) {
       out.bypass = true;
       out.bypass_val = 0x3F800000;
-    } else if ((input_bits & 0x7FFFFFFF) > 0x41800000) {
+    } else if (!sign && input_bits >= 0x42B17218) {
+      out.bypass = true;
+      out.bypass_val = 0x7F800000;
+    } else if (sign && input_bits >= 0xC2CFF1B5) {
       out.bypass = true;
       out.bypass_val = 0x00000000;
     }

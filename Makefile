@@ -109,3 +109,11 @@ clean:
 	for dir in $(SUBDIRS); do $(MAKE) -C $$dir clean; done
 
 .PHONY: all clean test-cmodel accuracy-sigmoid accuracy-exp accuracy-tanh generate-tanh-lut $(SUBDIRS)
+
+# Bit-for-bit EXP comparison against freshly elaborated RTL.
+test-exp-rtl: cmodel/build/libcmodel.a | $(BUILD_DIR)
+	$(MAKE) -C chisel
+	$(CXX) $(CXXFLAGS) -DTEST_EXP_RTL $(INCLUDES) -o $(BUILD_DIR)/exp_rtl_test tests/exp_test.cpp $(VERILATOR_SRCS) chisel/build/libchisel.a cmodel/build/libcmodel.a
+	LUT_PATH=./lut ./$(BUILD_DIR)/exp_rtl_test
+
+.PHONY: test-exp-rtl

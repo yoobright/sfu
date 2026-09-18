@@ -11,7 +11,7 @@ std::vector<float> InputGen::generate(SFUOp op, size_t count) {
     inputs.reserve(count);
     for (size_t i = 0; i < count; ++i) {
       double t = count == 1 ? 0.0 : static_cast<double>(i) / (count - 1);
-      inputs.push_back(static_cast<float>(-16.0 + 16.0 * t));
+      inputs.push_back(static_cast<float>(-103.972076416015625 + 192.69490814208984375 * t));
     }
     return inputs;
   }
