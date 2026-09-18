@@ -1,3 +1,4 @@
+.DEFAULT_GOAL := all
 CXX        = g++
 AR         = ar
 VERILATOR  = verilator
@@ -18,13 +19,17 @@ INCLUDES = -I$(ROOT_DIR)/include -I$(OBJ_DIR) -I$(VERILATOR_ROOT)/include -I$(RO
 
 VERILATOR_FLAGS = --cc --top-module SFU -Mdir $(OBJ_DIR)
 
-.PHONY: all verilog verilate clean
+.PHONY: all verilog verilate clean force-verilog
+
+# Tracked generated RTL may be older than the source after a checkout.
+# Always elaborate before simulation; never silently run stale EXP logic.
+force-verilog:
 
 all: $(TARGET)
 
 verilog: $(VERILOG)
 
-$(VERILOG): scala/SFU.scala $(wildcard ../lut/*-coeffs.txt)
+$(VERILOG): force-verilog scala/SFU.scala $(wildcard ../lut/*-coeffs.txt)
 	@LUT_PATH=../lut $(MILL) --no-server SFU.run
 
 verilate: $(OBJ_DIR)/VSFU__ALL.o

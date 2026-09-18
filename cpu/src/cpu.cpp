@@ -24,12 +24,6 @@ float CPU::compute(float input, SFUOp op) {
       return 1.0f;
     return 0.5f * (tanhf(0.5f * input) + 1.0f);
   case SFUOp::EXP:
-    if (std::isnan(input))
-      return input;
-    if (input < -16.0f)
-      return 0.0f;
-    if (input > 0.0f)
-      return 1.0f;
     return expf(input);
   case SFUOp::TANH:
     if (input <= -8.0f)

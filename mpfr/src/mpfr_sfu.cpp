@@ -49,12 +49,7 @@ float MPFR::compute_float(float input, SFUOp op) {
     mpfr_div_2ui(result, result, 1, MPFR_RNDN);
     break;
   case SFUOp::EXP:
-    if (input < -16.0f)
-      mpfr_set_zero(result, 1);
-    else if (input > 0.0f)
-      mpfr_set_ui(result, 1, MPFR_RNDN);
-    else
-      mpfr_exp(result, x, MPFR_RNDN);
+    mpfr_exp(result, x, MPFR_RNDN);
     break;
   case SFUOp::TANH:
     if (input <= -8.0f)
@@ -119,12 +114,7 @@ double MPFR::compute_double(double input, SFUOp op) {
     mpfr_div_2ui(result, result, 1, MPFR_RNDN);
     break;
   case SFUOp::EXP:
-    if (input < -16.0)
-      mpfr_set_zero(result, 1);
-    else if (input > 0.0)
-      mpfr_set_ui(result, 1, MPFR_RNDN);
-    else
-      mpfr_exp(result, x, MPFR_RNDN);
+    mpfr_exp(result, x, MPFR_RNDN);
     break;
   case SFUOp::TANH:
     if (input <= -8.0)

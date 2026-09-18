@@ -30,18 +30,6 @@ RangeReduceOutput SFURangeReduce::reduce(const FilterOutput &input, SFUOp op) {
                                  : frac_part;
   uint8_t quadrand = int_part & 0x3;
 
-  // log2(e), Q1.31. EXP first maps e^x to 2^(x * log2(e)); the rounded
-  // product remains Q?.23 so it can use the existing EXP2 split and LUT.
-  constexpr uint64_t LOG2_E_Q31 = 3098164009ULL;
-  uint64_t exp_scaled =
-      (sig_shifted * LOG2_E_Q31 + (1ULL << 30)) >> 31;
-  uint32_t exp_int_part = (exp_scaled >> 23) & 0xFF;
-  uint32_t exp_frac_part = exp_scaled & 0x7FFFFF;
-  uint32_t exp_frac_part_floor =
-      exp_frac_part == 0 ? 0 : ((~exp_frac_part + 1) & 0x7FFFFF);
-  uint8_t exp_int_part_floor =
-      exp_frac_part == 0 ? exp_int_part : exp_int_part + 1;
-
   out.sign = input.sign;
 
   switch (op) {
@@ -51,11 +39,28 @@ RangeReduceOutput SFURangeReduce::reduce(const FilterOutput &input, SFUOp op) {
     out.xl = frac_part_floor & 0x1FFFF;
     break;
 
-  case SFUOp::EXP:
-    out.exp = -static_cast<int8_t>(exp_int_part_floor);
-    out.index = (exp_frac_part_floor >> 17) & 0x3F;
-    out.xl = exp_frac_part_floor & 0x1FFFF;
+  case SFUOp::EXP: {
+    // Multiply the full 24-bit significand before shifting. This avoids
+    // truncating small inputs to Q23 before the log2(e) multiplication.
+    constexpr uint64_t LOG2_E_Q31 = 3098164009ULL;
+    uint64_t product = static_cast<uint64_t>(sig) * LOG2_E_Q31;
+    int shift = 31 - exp_signed; // live inputs have exponent <= 6
+    uint64_t scaled = shift >= 64 ? 0 :
+        (product + (1ULL << (shift - 1))) >> shift;
+    int integer = static_cast<int>(scaled >> 23);
+    uint32_t fraction = scaled & 0x7FFFFF;
+    if (input.sign) {
+      integer = -integer;
+      if (fraction != 0) {
+        --integer;
+        fraction = (1U << 23) - fraction;
+      }
+    }
+    out.exp = integer;
+    out.index = fraction >> 17;
+    out.xl = fraction & 0x1FFFF;
     break;
+  }
 
   case SFUOp::LOG2:
     out.exp = exp_signed;
