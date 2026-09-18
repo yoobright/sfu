@@ -32,20 +32,21 @@ case class FunctionParams(
   c2Sign: Int,
   c0Exp:  Int,
   c1Exp:  Int,
-  c2Exp:  Int
+  c2Exp:  Int,
+  centered: Boolean = false
 ) {
   val c0RealExp:    Int = c0Exp - SFUConfig.c0Width + 1
   val c1RealExp:    Int = c1Exp - SFUConfig.c1Width + 1
   val c2RealExp:    Int = c2Exp - SFUConfig.c2Width + 1
   val c1XlRealExp:  Int = c1RealExp - 23
   val c2Xl2RealExp: Int = c2RealExp - 2 * m - SFUConfig.squarerOutputWidth
-  val shift0:       Int = 2 * (23 - m) - SFUConfig.squarerOutputWidth
+  val shift0:       Int = 2 * (23 - m) - SFUConfig.squarerOutputWidth - (if (centered) 1 else 0)
   val shift1:       Int = c0RealExp - c1XlRealExp
-  val shift2:       Int = c0RealExp - c2Xl2RealExp
+  val shift2:       Int = c0RealExp - c2Xl2RealExp + (if (centered) 1 else 0)
 }
 
 object Function {
-  val EXP2  = FunctionParams(6, 1,  1,  1, 1,  1, -1)
+  val EXP2  = FunctionParams(6, 1,  1,  1, 1, -1, -1, centered = true)
   val LOG2  = FunctionParams(6, 1,  1, -1, 0,  1,  0)
   val RCP   = FunctionParams(7, 1, -1,  1, 0,  0,  0)
   val SQRT  = FunctionParams(6, 1,  1, -1, 0, -1, -3)
@@ -378,7 +379,15 @@ class RangeReduce extends Module {
   val tanhLocal = Mux(tanhFine, tanhArg(16, 1),
     Mux(tanhMiddle, tanhMiddleDelta(18, 3), tanhCoarseDelta(20, 5)))
 
+  // Unsigned center distance; reuse sign as left-of-center for EXP/EXP2.
+  val expLocal = Mux(op === SFUOp.EXP, expFracPartFloor(16, 0), fracPartFloor(16, 0))
+  val expLeft = expLocal < 65536.U(17.W)
+  val expMagnitude = Mux(expLeft, 65536.U(17.W) - expLocal,
+                        expLocal - 65536.U(17.W))
+
   val signFinal = MuxLookup(op, sign.asUInt) (Seq(
+    SFUOp.EXP -> expLeft.asUInt,
+    SFUOp.EXP2 -> expLeft.asUInt,
     SFUOp.SIN -> signSin,
     SFUOp.COS -> signCos,
     SFUOp.SIGMOID -> sign.asUInt,
@@ -412,7 +421,7 @@ class RangeReduce extends Module {
   ))
 
   val xl = MuxLookup(op, 0.U(32.W)) (Seq(
-    SFUOp.EXP2  -> fracPartFloor(16, 0),
+    SFUOp.EXP2  -> expMagnitude,
     SFUOp.LOG2  -> mantissa(16, 0),
     SFUOp.RCP   -> Cat(0.U(1.W), mantissa(15, 0)),
     SFUOp.SQRT  -> mantissa(16, 0),
@@ -421,7 +430,7 @@ class RangeReduce extends Module {
     SFUOp.COS   -> fracCos(16, 0),
     SFUOp.SIGMOID -> Cat(0.U(1.W), tanhLocal),
     SFUOp.TANH -> Cat(0.U(1.W), tanhLocal),
-    SFUOp.EXP -> expFracPartFloor(16, 0)
+    SFUOp.EXP -> expMagnitude
   ))
  
   val s1     = Wire(Decoupled(new RangeReduceToLookup))
@@ -565,6 +574,12 @@ class Poly extends Module {
 
   val c2Xl2 = s1Pipe.bits.c2 * xl2Signed
   val c1Xl  = s1Pipe.bits.c1 * xlSigned
+  // EXP/EXP2 encode the slope as bias + c1 / 2^17. Recover the
+  // power-of-two bias without widening the shared coefficient or multiplier.
+  val slopeBias = Mux(s1Pipe.bits.c0.asUInt < 48408813.U,
+    s1Pipe.bits.xl << 16, s1Pipe.bits.xl << 17)
+  val centeredProduct = c1Xl.asUInt + slopeBias
+  val centeredInput = s1Pipe.bits.op === SFUOp.EXP || s1Pipe.bits.op === SFUOp.EXP2
  
   val s2 = Wire(Decoupled(new Bundle {
     val op        = UInt(4.W)
@@ -581,7 +596,7 @@ class Poly extends Module {
   s2.valid           := s1Pipe.valid
   s2.bits.op         := s1Pipe.bits.op
   s2.bits.c0         := s1Pipe.bits.c0
-  s2.bits.c1Xl       := c1Xl
+  s2.bits.c1Xl       := Mux(centeredInput, centeredProduct.asSInt, c1Xl)
   s2.bits.c2Xl2      := c2Xl2
   s2.bits.exp        := s1Pipe.bits.exp
   s2.bits.sign       := s1Pipe.bits.sign
@@ -596,7 +611,15 @@ class Poly extends Module {
   val aligned1 = (s2Pipe.bits.c1Xl  >> shift1).asSInt
   val aligned2 = (s2Pipe.bits.c2Xl2 >> shift2).asSInt
  
-  val result = (s2Pipe.bits.c0 + aligned1 + aligned2)(26, 0)
+  val isCentered = s2Pipe.bits.op === SFUOp.EXP || s2Pipe.bits.op === SFUOp.EXP2
+  // Shared multipliers see nonnegative coefficients and zero-extended
+  // magnitudes for EXP/EXP2. Only the shared accumulator selects subtraction.
+  // Other functions retain their original sum modulo the 27-bit result width.
+  val subtractLinear = isCentered && s2Pipe.bits.sign.asBool
+  val linear = aligned1.asUInt(26, 0) +
+    (subtractLinear && s2Pipe.bits.c1Xl.asUInt(14, 0).orR).asUInt
+  val base = s2Pipe.bits.c0.asUInt + aligned2.asUInt(26, 0)
+  val result = Mux(subtractLinear, base - linear, base + linear)
  
   val s3     = Wire(Decoupled(new PolyToCompose))
   val s3Pipe = s3.handshakePipeIf(true)

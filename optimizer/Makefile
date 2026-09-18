@@ -28,7 +28,7 @@ all: $(TARGET)
 $(TARGET): $(OBJS) $(MAIN_OBJ) $(LIBS) | $(BUILD_DIR) $(CACHE_DIR)
 	$(CXX) $(CXXFLAGS) $(OBJS) $(MAIN_OBJ) $(LIBS) $(LDFLAGS) -o $@
 
-$(OBJ_DIR)/%.o: src/%.cpp | $(OBJ_DIR)
+$(OBJ_DIR)/%.o: src/%.cpp $(wildcard include/*.h ../cmodel/include/*.h) | $(OBJ_DIR)
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
 
 $(BUILD_DIR):
@@ -41,7 +41,7 @@ $(CACHE_DIR):
 	mkdir -p $(CACHE_DIR)
 
 # Ensure dependencies are built
-../cmodel/build/libcmodel.a:
+../cmodel/build/libcmodel.a: $(wildcard ../cmodel/src/*.cpp ../cmodel/include/*.h) ../cmodel/Makefile
 	$(MAKE) -C ../cmodel
 
 ../mpfr/build/libmpfr.a:

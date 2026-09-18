@@ -68,6 +68,53 @@ nearest, ties to even. No additional LUT is required.
 These are FP32 representability limits, not user-selected clipping limits.
 EXP remains an approximate SFU operation, not a correctly rounded `expf`.
 
+### Unsigned centered EXP/EXP2 interpolation
+
+EXP and EXP2 share the same **64 × 54-bit** table. The shared `SFUConfig`
+widths remain **26/16/12 bits for coefficients and 15 bits for the square**;
+multiplier widths and pipeline register widths/stage count are unchanged.
+Other functions retain their existing coefficients and interpolation geometry.
+
+For segment $j$, use its center $(j+1/2)/64$. If $R$ is the original 17-bit
+Q23 local argument, carry the unsigned magnitude $M=|R-65536|$ and reuse
+the existing sign metadata as a left-of-center flag. The integer exponent
+is calculated before this flag is repurposed. No signed residual or negative
+EXP coefficient is needed; the shared multipliers continue to support signed
+coefficients for other functions.
+
+The stored coefficients represent
+
+$$a_0=C_0/2^{25},\qquad a_1=b+C_1/2^{17},\qquad a_2=C_2/2^{13}.$$
+
+Here $b=1/2$ for segments 0–33, otherwise $b=1$. Extracting this fixed slope
+component lets the existing 16-bit `C1` store a finer correction. The hardware
+decodes the bias from `C0 < 48408813` (approximately $2^{25}/\ln 2$), so
+no extra table bit or pipeline flag is needed. The generator checks this
+encoding. The unsigned integer evaluation is:
+
+```text
+S = (M * M) >> 18
+V = C1 * M + (M << (C0 < 48408813 ? 16 : 17))
+L = V >> 15
+if left && (V & 32767) != 0: L += 1
+B = C0 + ((C2 * S) >> 16)
+P = left ? B - L : B + L
+```
+
+`P` remains Q2.25. The left endpoint `M=65536` requires the original 17-bit
+magnitude; its square reduces to 16384, within the existing 15-bit field.
+The conditional increment implements floor of a negative linear term using
+unsigned products. Final normal mantissa truncation remains unchanged.
+This adds local shift/add/select and bias-decode logic; unchanged shared widths
+do **not** imply zero area or timing cost. Synthesis is still required.
+
+`make generate-exp2-lut` regenerates all four table copies; `make check-exp2-lut`
+repeats its deterministic constrained search and exhaustive Q23 checks, and
+compares the copies (NumPy required). The primary table, optimizer table, and
+their backups use this new encoding. Legacy EXP2 coefficient tables are
+incompatible with centered evaluation. The general optimizer calls the updated
+C-model evaluator, so it evaluates the actual centered finite-word datapath.
+
 For **SIN/COS**, the functions computed are $\sin(\frac{\pi}{2} x)$ and $\cos(\frac{\pi}{2} x)$. The period is 4, so `quadrant = floor(x) mod 4` is read from the two low bits of the integer part of $x$. The LUT stores coefficients for $\sin(\frac{\pi}{2} t)$ over $t \in [0, 1)$ with 64 sub-intervals. The fractional part $f \in [0, 1)$ is used for interpolation, and the quadrant determines whether to use $t = f$ or $t = 1 - f$ and the sign of the result.
 
 For **TANH/SIGMOID**, one 128-entry LUT approximates $\tanh(|x|)$ in unsigned
@@ -104,6 +151,7 @@ S0: Filter (1 cycle)
 S1: RangeReduce (1 cycle)
     - EXP2/SIN/COS: Compute integer and fractional decomposition
     - EXP: multiply the magnitude by Q1.31 log2(e), then use the EXP2 decomposition
+    - EXP/EXP2: use unsigned distance from segment center; sign encodes the side
     - SIN/COS: quadrant = floor(x) mod 4; map fractional part f to t = f or 1-f based on quadrant[0]; sign from quadrant[1]
     - TANH/SIGMOID: reduce |x| or |x|/2 into the shared 128-entry TANH table
     - LOG2/RCP/SQRT/RSQRT: Extract exponent and split mantissa into index + xl
@@ -122,12 +170,14 @@ S3: Poly Stage 1 — Squarer (1 cycle)
     - Truncate and shift to 15-bit aligned representation
 
 S4: Poly Stage 2 — Parallel Multiply (1 cycle)
-    - Compute c1 × xl  (17×17 signed multiply → 35 bits)
-    - Compute c2 × xl² (13×15 signed multiply → 29 bits)
+    - Compute c1 × xl  (17×18 signed multiply with zero-extended xl → 35 bits)
+    - EXP/EXP2: add the slope bias using xl << 16 or xl << 17
+    - Compute c2 × xl² (13×16 signed multiply with zero-extended xl² → 29 bits)
 
 S5: Poly Stage 3 — Align and Sum (1 cycle)
     - Align c1·xl and c2·xl² to the scale of c0
     - Compute polyResult = c0 + aligned(c1·xl) + aligned(c2·xl²)
+    - EXP/EXP2: subtract the linear term on the left, including ceil compensation
     - Output: 27-bit fixed-point result
 
 S6: Compose (1 cycle)
@@ -155,20 +205,40 @@ S6: Compose (1 cycle)
 
 ## Accuracy
 
-Coefficients are optimized offline using the `optimizer` tool to minimize the worst-case absolute error within each sub-interval. The following tables compare accuracy against NVIDIA GPU results (measured with `-use_fast_math`) across $[0.25, 4)$.
+Coefficients are optimized offline for the finite-word evaluator. EXP2 and EXP
+results below come from the centered C model. Other function tables retain the
+previous measurements, including NVIDIA GPU results with `-use_fast_math`.
 
 ### EXP2
 
-| Interval | Implementation | MaxAbsErr | MaxULP | AvgAbsErr | AvgULP |
-|----------|---------------|-----------|--------|-----------|--------|
-| **[0.25, 0.5)** | This work | 2.384e-07 | **2** | 4.314e-08 | 0.36 |
-| | NVIDIA GPU | 1.192e-07 | 1 | 3.020e-08 | 0.25 |
-| **[0.5, 1)** | This work | 2.384e-07 | **2** | 4.269e-08 | 0.36 |
-| | NVIDIA GPU | 1.192e-07 | 1 | 3.746e-08 | 0.31 |
-| **[1, 2)** | This work | 2.384e-07 | **1** | 2.544e-08 | 0.11 |
-| | NVIDIA GPU | 2.384e-07 | 1 | 9.273e-08 | 0.39 |
-| **[2, 4)** | This work | 9.537e-07 | **1** | 7.624e-08 | 0.11 |
-| | NVIDIA GPU | 9.537e-07 | 1 | 2.801e-07 | 0.39 |
+`make accuracy-exp2` samples 1,048,576 inputs per interval, comparing to double
+`exp2` rounded to FP32. These samples do not exhaust finer-than-Q23 FP32 inputs
+below 1, so the table is not a full-domain 1-ULP claim.
+
+| Interval | MaxAbsErr | MaxULP | AvgAbsErr | AvgULP |
+|----------|-----------|--------|-----------|--------|
+| [0.25, 0.5) | 1.192093e-07 | 1 | 1.378942e-08 | 0.12 |
+| [0.5, 1) | 1.192093e-07 | 1 | 1.373701e-08 | 0.12 |
+| [1, 2) | 2.384186e-07 | 1 | 2.725346e-08 | 0.11 |
+| [2, 4) | 9.536743e-07 | 1 | 8.198140e-08 | 0.11 |
+
+`make test-cmodel` additionally tests **every FP32 input in [1,2)**: 8,388,608
+points covering all 64 segments and every Q23 residual. It checks monotonicity,
+segment boundaries, unsigned endpoint widths, bias encoding, and exact normal
+powers of two. The following comparison uses the same exhaustive inputs and a
+double reference, against the table in parent commit `004d94a`:
+
+| Metric | Previous table | Centered table |
+|--------|----------------|----------------|
+| Maximum error vs real-valued double reference, in output ULPs | 1.237385400 | **0.917733677** |
+| Maximum distance to FP32-rounded reference | 1 ULP | 1 ULP |
+| Mean distance to FP32-rounded reference | 0.106707215 ULP | 0.114353657 ULP |
+| Exact agreement with FP32-rounded reference | 89.3292785% | 88.5646343% |
+
+The optimization reduces the worst real-value kernel error by about **25.8%**;
+it slightly increases mean rounded-reference error. It is not a correctly
+rounded implementation or a strict improvement on every error metric.
+EXP's additional range-reduction error still permits 2-ULP results.
 
 ### LOG2
 
@@ -312,16 +382,16 @@ is `exp` evaluated in double precision and rounded to FP32.
 
 | Interval | MaxAbsErr | MaxULP | AvgAbsErr | AvgULP |
 |----------|-----------|--------|-----------|--------|
-| [-104, -87.33655) | 1.401298e-45 | **1** | 2.994966e-47 | 0.02 |
-| [-87.33655, -16) | 7.105427e-15 | **2** | 3.502094e-17 | 0.27 |
-| [-16, -8) | 2.910383e-11 | **2** | 9.368642e-13 | 0.27 |
-| [-8, -4) | 1.862645e-09 | **2** | 1.008709e-10 | 0.27 |
-| [-4, -2) | 1.490116e-08 | **2** | 1.306388e-09 | 0.27 |
-| [-2, -1) | 5.960464e-08 | **2** | 5.250527e-09 | 0.26 |
-| [-1, 0) | 1.192093e-07 | **2** | 1.400687e-08 | 0.28 |
-| [0, 16) | 1.000000e+00 | **2** | 1.240312e-02 | 0.27 |
-| [16, 64) | 5.902958e+20 | **2** | 3.000142e+18 | 0.27 |
-| [64, 88.72283172607422] | 4.056482e+31 | **2** | 3.277481e+29 | 0.28 |
+| [-104, -87.33655) | 1.401298e-45 | **1** | 3.059514e-47 | 0.02 |
+| [-87.33655, -16) | 7.105427e-15 | **2** | 3.540184e-17 | 0.28 |
+| [-16, -8) | 2.910383e-11 | **1** | 9.418482e-13 | 0.27 |
+| [-8, -4) | 1.862645e-09 | **2** | 1.013737e-10 | 0.27 |
+| [-4, -2) | 1.490116e-08 | **1** | 1.314088e-09 | 0.27 |
+| [-2, -1) | 2.980232e-08 | **1** | 5.273307e-09 | 0.26 |
+| [-1, 0) | 5.960464e-08 | **1** | 1.405414e-08 | 0.28 |
+| [0, 16) | 1.000000e+00 | **1** | 1.246722e-02 | 0.27 |
+| [16, 64) | 5.902958e+20 | **2** | 2.939919e+18 | 0.27 |
+| [64, 88.72283172607422] | 4.056482e+31 | **2** | 3.245063e+29 | 0.28 |
 
 Run `make accuracy-exp` to reproduce the C-model table. The default EXP input
 generator spans the finite, nonzero output range. `make test-cmodel` checks
@@ -333,8 +403,9 @@ These are sampled results, not an exhaustive FP32 accuracy proof. CPU, GPU,
 and MPFR references now evaluate unrestricted exponential.
 
 `make test-exp-rtl` regenerates RTL and compares EXP bit-for-bit with the C
-model using the same regression inputs (requires Mill/Chisel dependencies and
-Verilator). Chisel source includes the full-range EXP path. The checked-in
+model using the same regression inputs, then exhaustively checks EXP2 on
+[1,2) (requires Mill/Chisel dependencies and Verilator). Chisel source includes
+the full-range EXP path and unsigned centered EXP/EXP2 evaluator. The checked-in
 `chisel/generated/SFU.sv` has **not yet been regenerated for this change**:
 Maven dependency downloads were unavailable in the authoring environment.
 The Chisel build now always elaborates before simulation to avoid silently
@@ -345,7 +416,7 @@ build validation remain pending; the accuracy table above is C-model only.
 
 | Function | NVIDIA Spec | This Work (max over [0.5, 4)) | Status |
 |----------|-------------|-------------------------------|--------|
-| **EXP2** | Max 2 ULP | Max 2 ULP | **Satisfied** |
+| **EXP2** | Max 2 ULP | 1 ULP in current interval samples | Full-domain revalidation pending |
 | **LOG2** | Max $2^{-22}$ abs err in $(0.5, 2)$ | Max 2.384e-07 ($\approx 2^{-22}$) | **Satisfied** |
 | **RCP** | Max 1 ULP | Max 1 ULP | **Satisfied** |
 | **SQRT** | Max rel err $2^{-23}$ | Max rel err 1.192e-07 ($\approx 2^{-23}$) | **Satisfied** |
