@@ -28,8 +28,11 @@ struct FunctionParams {
   int m;
   int c0_sign, c1_sign, c2_sign;
   int c0_exp, c1_exp, c2_exp;
+  bool centered = false; // unsigned distance from the segment center
 
-  int shift0() const { return (23 - m) * 2 - SFUConfig::squarer_output_width; }
+  int shift0() const {
+    return (23 - m) * 2 - SFUConfig::squarer_output_width - (centered ? 1 : 0);
+  }
 
   int shift1() const {
     int c0_real_exp = c0_exp - SFUConfig::c0_width + 1;
@@ -42,7 +45,7 @@ struct FunctionParams {
     int c0_real_exp = c0_exp - SFUConfig::c0_width + 1;
     int c2_real_exp = c2_exp - SFUConfig::c2_width + 1;
     int c2_xl2_real_exp = c2_real_exp - 2 * m - SFUConfig::squarer_output_width;
-    return c0_real_exp - c2_xl2_real_exp;
+    return c0_real_exp - c2_xl2_real_exp + (centered ? 1 : 0);
   }
 };
 
@@ -72,7 +75,7 @@ struct FilterOutput {
 struct RangeReduceOutput {
   uint8_t index;
   uint32_t xl;
-  uint8_t sign;
+  uint8_t sign; // EXP/EXP2: left-of-center flag; other ops: output sign
   int16_t exp; // EXP needs a signed 9-bit exponent (-150..127).
 };
 
@@ -81,13 +84,13 @@ struct LUTOutput {
   int32_t c1;
   int32_t c2;
   uint32_t xl;
-  uint8_t sign;
+  uint8_t sign; // EXP/EXP2: left-of-center flag; other ops: output sign
   int16_t exp; // EXP needs a signed 9-bit exponent (-150..127).
 };
 
 struct PolyOutput {
   uint32_t result;
-  uint8_t sign;
+  uint8_t sign; // EXP/EXP2: left-of-center flag; other ops: output sign
   int16_t exp; // EXP needs a signed 9-bit exponent (-150..127).
 };
 

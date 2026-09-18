@@ -159,5 +159,13 @@ RangeReduceOutput SFURangeReduce::reduce(const FilterOutput &input, SFUOp op) {
     break;
   }
 
+  if (op == SFUOp::EXP || op == SFUOp::EXP2) {
+    // Keep the 17-bit magnitude unsigned. The exact left endpoint is 65536,
+    // so it must not be narrowed to 16 bits. Reuse sign as a direction flag.
+    constexpr uint32_t center = 1U << 16;
+    uint32_t local = out.xl;
+    out.sign = local < center;
+    out.xl = out.sign ? center - local : local - center;
+  }
   return out;
 }

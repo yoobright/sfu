@@ -42,10 +42,11 @@ endif
 
 all: run
 
-test-cmodel: $(SIGMOID_TEST) $(EXP_TEST) $(TANH_TEST)
+test-cmodel: $(SIGMOID_TEST) $(EXP_TEST) $(TANH_TEST) $(BUILD_DIR)/exp_centered_test
 	@LUT_PATH=./lut ./$(SIGMOID_TEST)
 	@LUT_PATH=./lut ./$(EXP_TEST)
 	@LUT_PATH=./lut ./$(TANH_TEST)
+	@LUT_PATH=./lut ./$(BUILD_DIR)/exp_centered_test
 
 accuracy-sigmoid: $(SIGMOID_ACCURACY)
 	@LUT_PATH=./lut ./$(SIGMOID_ACCURACY)
@@ -65,7 +66,7 @@ run: $(TARGET)
 util/build/libutil.a:
 	$(MAKE) -C util
 
-cmodel/build/libcmodel.a:
+cmodel/build/libcmodel.a: $(wildcard cmodel/src/*.cpp cmodel/include/*.h) cmodel/Makefile
 	$(MAKE) -C cmodel
 
 cpu/build/libcpu.a:
@@ -115,5 +116,30 @@ test-exp-rtl: cmodel/build/libcmodel.a | $(BUILD_DIR)
 	$(MAKE) -C chisel
 	$(CXX) $(CXXFLAGS) -DTEST_EXP_RTL $(INCLUDES) -o $(BUILD_DIR)/exp_rtl_test tests/exp_test.cpp $(VERILATOR_SRCS) chisel/build/libchisel.a cmodel/build/libcmodel.a
 	LUT_PATH=./lut ./$(BUILD_DIR)/exp_rtl_test
+	$(CXX) $(CXXFLAGS) -DTEST_EXP_RTL $(INCLUDES) -o $(BUILD_DIR)/exp_centered_rtl_test tests/exp_centered_test.cpp $(VERILATOR_SRCS) chisel/build/libchisel.a cmodel/build/libcmodel.a
+	LUT_PATH=./lut ./$(BUILD_DIR)/exp_centered_rtl_test
 
 .PHONY: test-exp-rtl
+
+$(BUILD_DIR)/exp_centered_test: tests/exp_centered_test.cpp cmodel/build/libcmodel.a | $(BUILD_DIR)
+	$(CXX) $(CXXFLAGS) -I./cmodel/include -o $@ $< cmodel/build/libcmodel.a
+
+generate-exp2-lut:
+	python3 tools/gen_exp2_centered_lut.py
+	cp lut/exp2-coeffs.txt lut/exp2-coeffs.txt.backup
+	cp lut/exp2-coeffs.txt optimizer/lut-optimized/exp2-coeffs.txt
+	cp lut/exp2-coeffs.txt optimizer/lut-optimized/exp2-coeffs.txt.backup
+
+check-exp2-lut:
+	python3 tools/gen_exp2_centered_lut.py --check
+	cmp lut/exp2-coeffs.txt lut/exp2-coeffs.txt.backup
+	cmp lut/exp2-coeffs.txt optimizer/lut-optimized/exp2-coeffs.txt
+	cmp lut/exp2-coeffs.txt optimizer/lut-optimized/exp2-coeffs.txt.backup
+
+accuracy-exp2: $(BUILD_DIR)/exp2_accuracy
+	LUT_PATH=./lut ./$(BUILD_DIR)/exp2_accuracy
+
+$(BUILD_DIR)/exp2_accuracy: tests/exp2_accuracy.cpp cmodel/build/libcmodel.a | $(BUILD_DIR)
+	$(CXX) $(CXXFLAGS) -I./cmodel/include -o $@ $< cmodel/build/libcmodel.a
+
+.PHONY: generate-exp2-lut check-exp2-lut accuracy-exp2

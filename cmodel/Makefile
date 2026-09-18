@@ -14,7 +14,7 @@ all: $(TARGET)
 $(TARGET): $(OBJS) | $(BUILD_DIR)
 	$(AR) rcs $@ $^
 
-$(OBJ_DIR)/%.o: src/%.cpp | $(OBJ_DIR)
+$(OBJ_DIR)/%.o: src/%.cpp $(wildcard include/*.h) | $(OBJ_DIR)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 $(BUILD_DIR):
